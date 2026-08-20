@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export default function Home() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-orange-50 px-4">
+    <div className="flex flex-1 flex-col items-center justify-center bg-orange-50 px-4">
       <main className="flex flex-col items-center gap-10 text-center">
         <div className="flex flex-col items-center gap-3">
           <span className="text-6xl">🍽️</span>
