@@ -63,7 +63,7 @@ A feature/phase is done when:
 *Update this section as phases are completed, so future sessions know where things stand.*
 
 - [x] Phase 0 — Project setup
-- [ ] Phase 1 — Data model
+- [x] Phase 1 — Data model
 - [ ] Phase 2 — Recipe browsing
 - [ ] Phase 3 — Add recipe form
 - [ ] Phase 4 — Randomizer logic
