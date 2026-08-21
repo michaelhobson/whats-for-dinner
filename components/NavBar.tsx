@@ -13,6 +13,12 @@ export default function NavBar() {
         </Link>
         <nav className="flex items-center gap-3">
           <Link
+            href="/randomize"
+            className="text-sm font-medium text-orange-700 hover:text-orange-900 transition-colors"
+          >
+            🎲 Randomize
+          </Link>
+          <Link
             href="/recipes"
             className="text-sm font-medium text-orange-700 hover:text-orange-900 transition-colors"
           >

@@ -14,20 +14,31 @@ export default function Home() {
           </p>
         </div>
 
-        <nav className="flex flex-col gap-4 sm:flex-row">
+        <div className="flex flex-col items-center gap-4 w-full max-w-xs">
+          {/* Primary CTA — the whole point of the app */}
           <Link
-            href="/recipes"
-            className="rounded-xl bg-orange-600 px-8 py-4 text-lg font-semibold text-white shadow-md transition-colors hover:bg-orange-700"
+            href="/randomize"
+            className="w-full rounded-xl bg-orange-600 px-8 py-4 text-lg font-bold text-white shadow-md transition-colors hover:bg-orange-700 text-center"
           >
-            Browse Recipes
+            🎲 Pick Something!
           </Link>
-          <Link
-            href="/recipes/new"
-            className="rounded-xl border-2 border-orange-600 px-8 py-4 text-lg font-semibold text-orange-700 transition-colors hover:bg-orange-100"
-          >
-            Add a Recipe
-          </Link>
-        </nav>
+
+          {/* Secondary actions */}
+          <div className="flex gap-3 w-full">
+            <Link
+              href="/recipes"
+              className="flex-1 rounded-xl border-2 border-orange-600 px-5 py-3 text-sm font-semibold text-orange-700 transition-colors hover:bg-orange-100 text-center"
+            >
+              Browse Recipes
+            </Link>
+            <Link
+              href="/recipes/new"
+              className="flex-1 rounded-xl border-2 border-orange-600 px-5 py-3 text-sm font-semibold text-orange-700 transition-colors hover:bg-orange-100 text-center"
+            >
+              Add a Recipe
+            </Link>
+          </div>
+        </div>
       </main>
     </div>
   );
