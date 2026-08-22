@@ -38,7 +38,11 @@ Keep data-fetching logic in server components or route handlers where possible r
 - `npx tsx prisma/seed.ts` (or equivalent) — re-run the seed script
 - `git add . && git commit -m "..."` — commit a working checkpoint after each completed phase
 
-## 5. Code & Design Conventions
+## 5. Database Safety
+
+Never run a script or command that deletes, truncates, or resets data (deleteMany, migrate reset, db push --force-reset, etc.) against the production database. Any destructive database operation must default to the LOCAL database only, and must require explicit confirmation from me before running against production. When in doubt about which database a command will affect, ask before running it.
+
+## 6. Code & Design Conventions
 
 - **TypeScript throughout** — no plain `.js` files for app code.
 - **Component style:** functional components with hooks; no class components.
@@ -48,7 +52,7 @@ Keep data-fetching logic in server components or route handlers where possible r
 - **Dependencies:** prefer what's already installed; only add a new package when it clearly earns its place (e.g. an animation helper), and mention what was added and why.
 - **Comments:** not required for every function, but leave a short comment anywhere the logic is non-obvious (e.g. the two-level cuisine selector, random-draw-without-repeats logic).
 
-## 6. Definitions of Done
+## 7. Definitions of Done
 
 A feature/phase is done when:
 
@@ -58,25 +62,32 @@ A feature/phase is done when:
 - The dev server starts cleanly with `npm run dev` and the relevant page loads without a crash.
 - New fields/tags added to the data model are reflected everywhere they should appear (browse cards, detail view, add-recipe form, randomizer filters) — a tag that only exists in the database but isn't visible/filterable anywhere is not done.
 
-## 7. Current Status
+## 8. Current Status
 
 *Update this section as phases are completed, so future sessions know where things stand.*
 
-- [x] Phase 0 — Project setup
-- [x] Phase 1 — Data model
-- [x] Phase 2 — Recipe browsing
-- [x] Phase 3 — Add recipe form
-- [x] Phase 4 — Randomizer logic
-- [x] Phase 5 — Randomizer reveal animation
-- [ ] Phase 6 — Polish pass
+- [x] Phases 1.1-6 — Project setup, basic features, anmd initial polish
+- [x] Phase 2.1 — Foundation
+- [x] Phase 2.2 — Push to Web
+- [ ] Phase 2.3 — Import
+- [ ] Phase 2.4 Accounts ("Kitchens")
+- [ ] Phase 2.5 — Share
+- [ ] Phase 2.6 — Planning tools
 
-## 8. Non-Goals / Out of Scope (for now)
+## 9. Future Architecture Notes
 
-Don't add these unless explicitly requested in a prompt, even if they seem like natural next steps:
+These are future design considerations to be aware of that should be accounted for when making changes now.
 
-- User accounts, login, or authentication
-- Cloud/hosted deployment or a hosted database
-- Editing or deleting existing recipes (only adding, for now)
+**Accounts model (planned):** Recipes, ratings, notes, and cook history belong to a "Kitchen," not directly to a User. A KitchenMembership join table links Users to Kitchens with a role (Restaurateur/Chef/Diner). MVP: every user gets one personal Kitchen, solo membership, Restaurateur role. This is intentional scaffolding for a future household model where a Kitchen has multiple members with different roles, and a User can belong to multiple Kitchens. Do not simplify this back to a direct User-owns-Recipe relationship, even though MVP usage looks identical to that.
+
+**Recipe provenance (planned):** Recipe has nullable `sourceUrl` and `forkedFromRecipeId` fields, unused until cross-kitchen recipe sharing is built. Keep these fields when touching the Recipe model.
+
+## 10. Non-Goals / Out of Scope (for now)
+
+We'll be adding new features over time, including in the current phases. What follows is roughly the order we'll be addding these features. Don't add these unless explicitly requested in a prompt, even if they seem like natural next steps:
+
 - Recipe importation features
+- User accounts, login, or authentication
 - Meal planning / calendar / grocery-list features
-- Sharing recipes outside the two people using the app
+- Additional randomization modes
+- Sharing recipes
