@@ -1,8 +1,9 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { createRecipe } from "@/app/actions/recipes";
+import { RecipeFormState } from "@/app/actions/recipes";
 import { CUISINE_REGIONS, regionToStyles, CuisinePairing } from "@/lib/cuisine";
+import { ParsedRecipe } from "@/lib/recipe-utils";
 
 // ── Option constants ──────────────────────────────────────────────────────────
 
@@ -43,24 +44,44 @@ const labelCls = "block text-sm font-medium text-gray-700 mb-1";
 
 type Ingredient = { amount: string; unit: string; name: string };
 
+type FormAction = (state: RecipeFormState, formData: FormData) => Promise<RecipeFormState>;
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function AddRecipeForm() {
-  const [state, formAction, isPending] = useActionState(createRecipe, null);
+export default function AddRecipeForm({
+  serverAction,
+  initialData,
+}: {
+  serverAction: FormAction;
+  initialData?: ParsedRecipe;
+}) {
+  const [state, formAction, isPending] = useActionState(serverAction, null);
 
-  const [name, setName] = useState("");
+  const isEdit = initialData != null;
+
+  const [name, setName] = useState(initialData?.name ?? "");
   const [nameError, setNameError] = useState("");
-  const [ingredients, setIngredients] = useState<Ingredient[]>([
-    { amount: "", unit: "", name: "" },
-  ]);
 
-  // Confirmed cuisine pairings (up to 2)
-  const [cuisines, setCuisines] = useState<CuisinePairing[]>([]);
-  // Whether the region/style picker is open
-  const [pickerOpen, setPickerOpen] = useState(true);
-  // Which slot the picker is editing (== cuisines.length when adding new)
+  const [ingredients, setIngredients] = useState<Ingredient[]>(() => {
+    if (initialData?.ingredients?.length) {
+      return initialData.ingredients.map((ing) => ({
+        amount: ing.amount ?? "",
+        unit:   ing.unit ?? "",
+        name:   ing.name,
+      }));
+    }
+    return [{ amount: "", unit: "", name: "" }];
+  });
+
+  const [directions, setDirections] = useState<string[]>(() => {
+    if (initialData?.directions?.length) return initialData.directions;
+    return [""];
+  });
+
+  // Cuisine picker state
+  const [cuisines, setCuisines] = useState<CuisinePairing[]>(initialData?.cuisine ?? []);
+  const [pickerOpen, setPickerOpen] = useState((initialData?.cuisine.length ?? 0) === 0);
   const [pickerIndex, setPickerIndex] = useState(0);
-  // Selected region in the currently open picker
   const [pickerRegion, setPickerRegion] = useState<string | null>(null);
 
   // ── Ingredient helpers ────────────────────────────────────────────────────
@@ -73,15 +94,29 @@ export default function AddRecipeForm() {
       prev.map((ing, idx) => (idx === i ? { ...ing, [field]: val } : ing))
     );
 
+  // ── Directions helpers ────────────────────────────────────────────────────
+  const addDirection = () =>
+    setDirections((prev) => [...prev, ""]);
+  const removeDirection = (i: number) =>
+    setDirections((prev) => prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev);
+  const updateDirection = (i: number, val: string) =>
+    setDirections((prev) => prev.map((s, idx) => (idx === i ? val : s)));
+  const moveDirection = (i: number, delta: -1 | 1) =>
+    setDirections((prev) => {
+      const next = [...prev];
+      const j = i + delta;
+      if (j < 0 || j >= next.length) return prev;
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+
   // ── Cuisine helpers ───────────────────────────────────────────────────────
   const pickStyle = (style: string) => {
     if (!pickerRegion) return;
     const pairing: CuisinePairing = { region: pickerRegion, style };
     if (pickerIndex < cuisines.length) {
-      // Editing existing
       setCuisines((prev) => prev.map((c, i) => (i === pickerIndex ? pairing : c)));
     } else {
-      // Adding new
       setCuisines((prev) => [...prev, pairing]);
     }
     setPickerOpen(false);
@@ -129,8 +164,15 @@ export default function AddRecipeForm() {
       }))
   );
 
+  const directionsJson = JSON.stringify(
+    directions.filter((s) => s.trim()).map((s) => s.trim())
+  );
+
   return (
     <form action={formAction} onSubmit={handleSubmit} className="space-y-5">
+      {/* Hidden id for edit mode */}
+      {isEdit && <input type="hidden" name="id" value={initialData.id} />}
+
       {state?.error && (
         <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
           {state.error}
@@ -160,9 +202,9 @@ export default function AddRecipeForm() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Field label="Main Protein"   name="mainProtein"   placeholder="e.g. chicken" />
-            <Field label="Main Starch"    name="mainStarch"    placeholder="e.g. pasta" />
-            <Field label="Main Vegetable" name="mainVegetable" placeholder="e.g. spinach" />
+            <Field label="Main Protein"   name="mainProtein"   placeholder="e.g. chicken" defaultValue={initialData?.mainProtein ?? undefined} />
+            <Field label="Main Starch"    name="mainStarch"    placeholder="e.g. pasta"   defaultValue={initialData?.mainStarch ?? undefined} />
+            <Field label="Main Vegetable" name="mainVegetable" placeholder="e.g. spinach" defaultValue={initialData?.mainVegetable ?? undefined} />
           </div>
         </div>
       </FormSection>
@@ -223,10 +265,73 @@ export default function AddRecipeForm() {
         <input type="hidden" name="ingredients" value={ingredientsJson} />
       </FormSection>
 
+      {/* ── Directions ── */}
+      <FormSection title="Directions">
+        <div className="space-y-2">
+          {directions.map((step, i) => (
+            <div key={i} className="flex items-start gap-2">
+              <span className="w-6 pt-2.5 text-sm font-semibold text-orange-400 flex-shrink-0 select-none text-center">
+                {i + 1}.
+              </span>
+              <textarea
+                value={step}
+                onChange={(e) => updateDirection(i, e.target.value)}
+                placeholder={`Step ${i + 1}…`}
+                rows={2}
+                className={`${inputCls} flex-1 min-w-0 resize-none`}
+              />
+              <div className="flex flex-col gap-0.5 flex-shrink-0 pt-1">
+                <button
+                  type="button"
+                  onClick={() => moveDirection(i, -1)}
+                  disabled={i === 0}
+                  aria-label="Move step up"
+                  className="w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-20 disabled:cursor-not-allowed transition-colors text-xs"
+                >
+                  ▲
+                </button>
+                <button
+                  type="button"
+                  onClick={() => moveDirection(i, 1)}
+                  disabled={i === directions.length - 1}
+                  aria-label="Move step down"
+                  className="w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-20 disabled:cursor-not-allowed transition-colors text-xs"
+                >
+                  ▼
+                </button>
+              </div>
+              {directions.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removeDirection(i)}
+                  aria-label="Remove step"
+                  className="flex-shrink-0 w-7 h-7 mt-1 flex items-center justify-center rounded-full text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={addDirection}
+            className="mt-2 text-sm font-medium text-orange-600 hover:text-orange-800 transition-colors"
+          >
+            + Add Step
+          </button>
+        </div>
+        <input type="hidden" name="directions" value={directionsJson} />
+      </FormSection>
+
       {/* ── Classification ── */}
       <FormSection title="Classification">
         <div className="space-y-5">
-          <CheckboxGroup label="Meal Type" name="mealType" options={MEAL_TYPES} />
+          <CheckboxGroup
+            label="Meal Type"
+            name="mealType"
+            options={MEAL_TYPES}
+            defaultValues={initialData?.mealType}
+          />
 
           <div>
             <label className={labelCls} htmlFor="dishCategory">
@@ -236,6 +341,7 @@ export default function AddRecipeForm() {
               id="dishCategory"
               name="dishCategory"
               type="text"
+              defaultValue={initialData?.dishCategory ?? undefined}
               placeholder="e.g. pasta, soup, stir-fry, grain bowl, salad"
               className={inputCls}
             />
@@ -250,7 +356,6 @@ export default function AddRecipeForm() {
               </span>
             </p>
 
-            {/* Confirmed chips */}
             <div className="flex flex-wrap gap-2 mb-3">
               {cuisines.map((c, i) => (
                 <span
@@ -279,7 +384,6 @@ export default function AddRecipeForm() {
                 </span>
               ))}
 
-              {/* Add second pairing link */}
               {!pickerOpen && cuisines.length === 1 && (
                 <button
                   type="button"
@@ -291,14 +395,16 @@ export default function AddRecipeForm() {
               )}
             </div>
 
-            {/* Picker — shown when adding/editing */}
             {pickerOpen && (
               <div className="rounded-xl border border-blue-100 bg-blue-50/30 p-4 space-y-3">
                 <p className="text-xs font-semibold text-blue-500 uppercase tracking-wide">
-                  {pickerIndex < cuisines.length ? "Edit cuisine" : cuisines.length === 0 ? "Select a cuisine" : "Add second cuisine"}
+                  {pickerIndex < cuisines.length
+                    ? "Edit cuisine"
+                    : cuisines.length === 0
+                    ? "Select a cuisine"
+                    : "Add second cuisine"}
                 </p>
 
-                {/* Region pills — unselected are smaller/muted when one is active */}
                 <div className="flex flex-wrap gap-1.5">
                   {CUISINE_REGIONS.map(({ region }) => {
                     const isActive = pickerRegion === region;
@@ -322,7 +428,6 @@ export default function AddRecipeForm() {
                   })}
                 </div>
 
-                {/* Style chips — shown after a region is selected */}
                 {pickerRegion && (
                   <div className="pt-1 pl-3 border-l-2 border-blue-300">
                     <p className="text-xs text-blue-500 font-semibold mb-2">{pickerRegion}</p>
@@ -341,19 +446,16 @@ export default function AddRecipeForm() {
                   </div>
                 )}
 
-                {pickerOpen && (
-                  <button
-                    type="button"
-                    onClick={() => { setPickerOpen(false); setPickerRegion(null); }}
-                    className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => { setPickerOpen(false); setPickerRegion(null); }}
+                  className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  Cancel
+                </button>
               </div>
             )}
 
-            {/* Show "Select cuisine" prompt if nothing set yet and picker is closed */}
             {!pickerOpen && cuisines.length === 0 && (
               <button
                 type="button"
@@ -364,11 +466,15 @@ export default function AddRecipeForm() {
               </button>
             )}
 
-            {/* Hidden input carries the cuisine JSON into FormData */}
             <input type="hidden" name="cuisineJson" value={JSON.stringify(cuisines)} />
           </div>
 
-          <CheckboxGroup label="Season" name="season" options={SEASONS} />
+          <CheckboxGroup
+            label="Season"
+            name="season"
+            options={SEASONS}
+            defaultValues={initialData?.season}
+          />
         </div>
       </FormSection>
 
@@ -381,7 +487,7 @@ export default function AddRecipeForm() {
               <select
                 id="difficulty"
                 name="difficulty"
-                defaultValue="medium"
+                defaultValue={initialData?.difficulty ?? "medium"}
                 className={`${inputCls} bg-white`}
               >
                 <option value="easy">Easy</option>
@@ -398,7 +504,7 @@ export default function AddRecipeForm() {
                   type="number"
                   min={1}
                   max={480}
-                  defaultValue={30}
+                  defaultValue={initialData?.prepTime ?? 30}
                   className={`${inputCls} w-20`}
                 />
                 <span className="text-sm text-gray-500 whitespace-nowrap">min</span>
@@ -411,6 +517,7 @@ export default function AddRecipeForm() {
             name="cookingMethod"
             options={COOKING_METHODS.map((m) => m.value)}
             labels={COOKING_METHODS.map((m) => m.label)}
+            defaultValues={initialData?.cookingMethod}
           />
         </div>
       </FormSection>
@@ -418,13 +525,23 @@ export default function AddRecipeForm() {
       {/* ── Flavor & More ── */}
       <FormSection title="Flavor & More">
         <div className="space-y-5">
-          <CheckboxGroup label="Flavor Notes" name="flavorNotes" options={FLAVOR_NOTES} />
+          <CheckboxGroup
+            label="Flavor Notes"
+            name="flavorNotes"
+            options={FLAVOR_NOTES}
+            defaultValues={initialData?.flavorNotes}
+          />
 
           <div>
             <p className={labelCls}>Favourite</p>
             <label className="inline-flex items-center gap-3 cursor-pointer select-none">
               <div className="relative w-10 h-6 flex-shrink-0">
-                <input type="checkbox" name="favorite" className="sr-only peer" />
+                <input
+                  type="checkbox"
+                  name="favorite"
+                  defaultChecked={initialData?.favorite ?? false}
+                  className="sr-only peer"
+                />
                 <div className="absolute inset-0 bg-gray-200 rounded-full transition-colors peer-checked:bg-orange-500" />
                 <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
               </div>
@@ -441,7 +558,7 @@ export default function AddRecipeForm() {
           disabled={isPending}
           className="rounded-xl bg-orange-600 px-8 py-3 text-base font-semibold text-white shadow-sm hover:bg-orange-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          {isPending ? "Saving…" : "Save Recipe"}
+          {isPending ? "Saving…" : isEdit ? "Save Changes" : "Save Recipe"}
         </button>
       </div>
     </form>
@@ -463,7 +580,17 @@ function FormSection({ title, children }: { title: string; children: React.React
   );
 }
 
-function Field({ label, name, placeholder }: { label: string; name: string; placeholder?: string }) {
+function Field({
+  label,
+  name,
+  placeholder,
+  defaultValue,
+}: {
+  label: string;
+  name: string;
+  placeholder?: string;
+  defaultValue?: string;
+}) {
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor={name}>
@@ -474,6 +601,7 @@ function Field({ label, name, placeholder }: { label: string; name: string; plac
         name={name}
         type="text"
         placeholder={placeholder}
+        defaultValue={defaultValue}
         className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition"
       />
     </div>
@@ -485,11 +613,13 @@ function CheckboxGroup({
   name,
   options,
   labels,
+  defaultValues,
 }: {
   label: string;
   name: string;
   options: readonly string[];
   labels?: string[];
+  defaultValues?: string[];
 }) {
   return (
     <div>
@@ -504,6 +634,7 @@ function CheckboxGroup({
               type="checkbox"
               name={name}
               value={value}
+              defaultChecked={defaultValues?.includes(value)}
               className="w-4 h-4 rounded border-gray-300 accent-orange-600 cursor-pointer"
             />
             <span className="capitalize">{labels?.[i] ?? value}</span>

@@ -30,6 +30,13 @@ export default function NavBar() {
           >
             + Add Recipe
           </Link>
+          <Link
+            href="/settings"
+            className="text-sm text-orange-400 hover:text-orange-600 transition-colors"
+            title="Settings"
+          >
+            ⚙
+          </Link>
         </nav>
       </div>
     </header>

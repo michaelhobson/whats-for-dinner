@@ -1,15 +1,17 @@
 import { PrismaClient } from "@/app/generated/prisma/client";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaPg } from "@prisma/adapter-pg";
 
 function makeClient() {
-  const adapter = new PrismaBetterSqlite3({
-    url: process.env.DATABASE_URL ?? "file:./prisma/dev.db",
-  });
+  const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
   return new PrismaClient({ adapter });
 }
 
-const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
+// Key is versioned so that running `prisma generate` after a schema change
+// forces a fresh client instance on the next HMR reload, without needing a
+// full dev-server restart.
+const KEY = "__prisma_v4__";
+const globalForPrisma = globalThis as unknown as { [KEY]: PrismaClient };
 
-export const prisma = globalForPrisma.prisma ?? makeClient();
+export const prisma = globalForPrisma[KEY] ?? makeClient();
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+if (process.env.NODE_ENV !== "production") globalForPrisma[KEY] = prisma;

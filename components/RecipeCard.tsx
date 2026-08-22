@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ParsedRecipe, difficultyStyle } from "@/lib/recipe-utils";
+import { ParsedRecipe, difficultyStyle, ratingIcon } from "@/lib/recipe-utils";
 
 export default function RecipeCard({ recipe }: { recipe: ParsedRecipe }) {
   const diff = difficultyStyle[recipe.difficulty];
@@ -7,7 +7,7 @@ export default function RecipeCard({ recipe }: { recipe: ParsedRecipe }) {
   return (
     <Link href={`/recipes/${recipe.id}`} className="group block h-full">
       <article className="bg-white rounded-2xl border border-orange-100 shadow-sm h-full flex flex-col gap-3 p-5 transition-all duration-150 group-hover:shadow-md group-hover:-translate-y-0.5">
-        {/* Meal type chips + favorite */}
+        {/* Meal type chips + favorite + rating */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex flex-wrap gap-1">
             {recipe.mealType.map((t) => (
@@ -19,11 +19,16 @@ export default function RecipeCard({ recipe }: { recipe: ParsedRecipe }) {
               </span>
             ))}
           </div>
-          {recipe.favorite && (
-            <span title="Favourite" className="text-lg leading-none select-none">
-              ❤️
-            </span>
-          )}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {recipe.rating && (
+              <span title={recipe.rating === "up" ? "Liked it" : "Not a hit"} className="text-base leading-none select-none">
+                {ratingIcon[recipe.rating]}
+              </span>
+            )}
+            {recipe.favorite && (
+              <span title="Favourite" className="text-lg leading-none select-none">❤️</span>
+            )}
+          </div>
         </div>
 
         {/* Name */}
@@ -52,7 +57,6 @@ export default function RecipeCard({ recipe }: { recipe: ParsedRecipe }) {
           ))}
         </div>
 
-        {/* Spacer so bottom row sticks to bottom */}
         <div className="flex-1" />
 
         {/* Flavor notes */}

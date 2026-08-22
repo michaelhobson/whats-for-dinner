@@ -1,10 +1,8 @@
 import "dotenv/config";
 import { PrismaClient, Difficulty } from "../app/generated/prisma/client";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaPg } from "@prisma/adapter-pg";
 
-const adapter = new PrismaBetterSqlite3({
-  url: process.env.DATABASE_URL ?? "file:./dev.db",
-});
+const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
 type Ingredient = { name: string; amount?: string; unit?: string };
@@ -13,7 +11,19 @@ const ing = (list: Ingredient[]) => JSON.stringify(list);
 const cuis = (list: CuisinePairing[]) => JSON.stringify(list);
 
 async function main() {
-  await prisma.recipe.deleteMany();
+  // By default, skip seeding if recipes already exist so user-added recipes
+  // are not wiped. Pass --force to clear and reseed from scratch.
+  const force = process.argv.includes("--force");
+  const existingCount = await prisma.recipe.count();
+  if (existingCount > 0 && !force) {
+    console.log(
+      `Skipping seed: ${existingCount} recipe(s) already in the database.\n` +
+      `Run with --force to wipe and reseed.`
+    );
+    return;
+  }
+
+  if (force) await prisma.recipe.deleteMany();
 
   await prisma.recipe.createMany({
     data: [

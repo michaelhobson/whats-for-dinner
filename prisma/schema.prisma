@@ -4,7 +4,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 enum Difficulty {
@@ -22,8 +22,10 @@ model Recipe {
   mainStarch    String?
   mainVegetable String?
 
-  // JSON-encoded [{name: string, quantity?: string}]
+  // JSON-encoded [{name, amount?, unit?}]
   ingredients   String
+  // JSON-encoded string[] (ordered steps)
+  directions    String     @default("[]")
 
   favorite      Boolean    @default(false)
 
@@ -32,19 +34,27 @@ model Recipe {
   difficulty    Difficulty
   prepTime      Int        // estimated total minutes
 
-  // Multi-value fields: comma-separated strings.
-  // Valid tokens per field:
-  //   mealType     — breakfast | lunch | dinner | dessert | snack
-  //   cuisine      — region strings, max 2 (e.g. "East Asian,Mediterranean")
-  //   flavorNotes  — free-form (e.g. "rich,umami,cheesy")
-  //   season       — spring | summer | fall | winter | any
-  //   cookingMethod — oven | stovetop | instant-pot | slow-cooker | grill | no-cook | air-fryer
+  // Multi-value fields: comma-separated strings
   mealType      String
-  cuisine       String
+  cuisine       String     // JSON: [{region, style}] — up to 2 pairings
   flavorNotes   String
   season        String
   cookingMethod String
 
+  // Rating: "up" | "down" — null means not yet rated
+  rating        String?
+  // Free-text notes (e.g. "use less salt next time")
+  notes         String?
+
+  cookHistory   CookLog[]
+
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
+}
+
+model CookLog {
+  id        Int      @id @default(autoincrement())
+  recipeId  Int
+  recipe    Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  cookedAt  DateTime @default(now())
 }

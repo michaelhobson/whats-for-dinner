@@ -11,6 +11,15 @@ const MEAL_TYPES   = ["breakfast", "lunch", "dinner", "dessert", "snack"] as con
 const FLAVOR_NOTES = ["rich", "sweet", "bright", "cheesy", "creamy", "spicy", "umami", "tangy", "smoky", "herby", "nutty", "garlicky"] as const;
 const SEASONS      = ["spring", "summer", "fall", "winter", "any"] as const;
 const DIFFICULTIES = ["easy", "medium", "hard"] as const;
+
+// Rating options — intentionally using "none" for unrated recipes
+const RATING_OPTIONS = [
+  { value: "up",   label: "👍 Liked" },
+  { value: "none", label: "⬜ Not yet rated" },
+  { value: "down", label: "👎 Not a hit" },
+] as const;
+// Default: thumbs-up and unrated included; thumbs-down excluded
+const RATING_DEFAULT = ["up", "none"];
 const COOKING_METHODS = [
   { value: "oven",        label: "Oven" },
   { value: "stovetop",    label: "Stovetop" },
@@ -31,6 +40,8 @@ type Filters = {
   season: string[];
   difficulty: string[];
   cookingMethod: string[];
+  // Rating uses exact-match logic: empty = no recipes match (intentional, unlike other filters)
+  rating: string[];
   protein: string;
   starch: string;
   vegetable: string;
@@ -45,7 +56,8 @@ const REVEAL_DELAY_MS  = 350;
 
 // ── Filter initialisation ────────────────────────────────────────────────────
 
-// Builds the default all-selected filter state from the recipe pool.
+// Builds the default filter state from the recipe pool.
+// Rating intentionally defaults to a partial selection (up + none) per product spec.
 function computeDefaultFilters(recipes: ParsedRecipe[]): Filters {
   const cuisineStyles = [...new Set(recipes.flatMap((r) => r.cuisine.map((p) => p.style)))].sort();
   const categories    = [...new Set(recipes.map((r) => r.dishCategory).filter((c): c is string => c != null))].sort();
@@ -57,6 +69,7 @@ function computeDefaultFilters(recipes: ParsedRecipe[]): Filters {
     season:       [...SEASONS],
     difficulty:   [...DIFFICULTIES],
     cookingMethod: COOKING_METHODS.map((m) => m.value),
+    rating:       [...RATING_DEFAULT],
     protein:      "",
     starch:       "",
     vegetable:    "",
@@ -75,6 +88,10 @@ function applyFilters(recipes: ParsedRecipe[], f: Filters): ParsedRecipe[] {
   const matchText = (val: string | null, q: string) =>
     !q.trim() || (val?.toLowerCase().includes(q.toLowerCase()) ?? false);
 
+  // Rating uses exact-match only; empty filter means no recipes pass (intentional).
+  const matchRating = (rating: string | null, filter: string[]) =>
+    filter.includes(rating ?? "none");
+
   return recipes.filter(
     (r) =>
       matchArr(r.mealType, f.mealType) &&
@@ -85,6 +102,7 @@ function applyFilters(recipes: ParsedRecipe[], f: Filters): ParsedRecipe[] {
       matchSeason(r.season, f.season) &&
       matchArr([r.difficulty], f.difficulty) &&
       matchArr(r.cookingMethod, f.cookingMethod) &&
+      matchRating(r.rating, f.rating) &&
       matchText(r.mainProtein, f.protein) &&
       matchText(r.mainStarch, f.starch) &&
       matchText(r.mainVegetable, f.vegetable)
@@ -145,7 +163,7 @@ export default function RandomizerClient({ recipes }: { recipes: ParsedRecipe[] 
 
   const filteredPool = useMemo(() => applyFilters(recipes, filters), [recipes, filters]);
 
-  // Count narrowed categories: has some (not all, not none) selected
+  // Count narrowed categories: anything not at full default selection
   const narrowedCount = useMemo(() => {
     let n = 0;
     if (filters.mealType.length > 0 && filters.mealType.length < MEAL_TYPES.length) n++;
@@ -156,6 +174,8 @@ export default function RandomizerClient({ recipes }: { recipes: ParsedRecipe[] 
     const totalStyles = [...cuisineIndex.values()].reduce((acc, s) => acc + s.size, 0);
     if (filters.cuisine.length > 0 && filters.cuisine.length < totalStyles) n++;
     if (filters.dishCategory.length > 0 && uniqueCategories.length > 0 && filters.dishCategory.length < uniqueCategories.length) n++;
+    // Rating is narrowed whenever it's not all 3 options (its default is already partial)
+    if (filters.rating.length < RATING_OPTIONS.length) n++;
     if (filters.protein.trim()) n++;
     if (filters.starch.trim()) n++;
     if (filters.vegetable.trim()) n++;
@@ -517,6 +537,22 @@ export default function RandomizerClient({ recipes }: { recipes: ParsedRecipe[] 
                     />
                   </CategoryFilter>
                 )}
+
+                {/* Rating — defaults to partial (up + none); empty ≠ all for this filter */}
+                <CategoryFilter
+                  label="Rating"
+                  allOptions={RATING_OPTIONS.map((r) => r.value)}
+                  selected={filters.rating}
+                  onSelectAll={() => setArr("rating", RATING_OPTIONS.map((r) => r.value))}
+                  onClear={() => setArr("rating", [])}
+                >
+                  <CheckboxList
+                    options={RATING_OPTIONS.map((r) => r.value)}
+                    labels={RATING_OPTIONS.map((r) => r.label)}
+                    selected={filters.rating}
+                    onToggle={(v) => toggleItem("rating", v)}
+                  />
+                </CategoryFilter>
 
                 {/* Component text filters */}
                 <div>
