@@ -2,47 +2,35 @@
 
 import { useActionState, useState } from "react";
 import { createRecipe } from "@/app/actions/recipes";
+import { CUISINE_REGIONS, regionToStyles, CuisinePairing } from "@/lib/cuisine";
 
 // ── Option constants ──────────────────────────────────────────────────────────
 
 const MEAL_TYPES = ["breakfast", "lunch", "dinner", "dessert", "snack"] as const;
 
-const CUISINE_REGIONS = [
-  "East Asian",
-  "Southeast Asian",
-  "South Asian",
-  "Middle Eastern",
-  "Mediterranean",
-  "Eastern European",
-  "Western European",
-  "Latin American",
-  "North American",
-  "African",
-  "Caribbean",
-] as const;
-
 const FLAVOR_NOTES = [
-  "rich",
-  "sweet",
-  "bright",
-  "cheesy",
-  "creamy",
-  "spicy",
-  "umami",
-  "tangy",
+  "rich", "sweet", "bright", "cheesy", "creamy", "spicy", "umami", "tangy",
+  "smoky", "herby", "nutty", "garlicky",
 ] as const;
 
 const SEASONS = ["spring", "summer", "fall", "winter", "any"] as const;
 
 const COOKING_METHODS: { value: string; label: string }[] = [
-  { value: "oven", label: "Oven" },
-  { value: "stovetop", label: "Stovetop" },
-  { value: "instant-pot", label: "Instant Pot" },
-  { value: "slow-cooker", label: "Slow Cooker" },
-  { value: "grill", label: "Grill" },
-  { value: "no-cook", label: "No Cook" },
-  { value: "air-fryer", label: "Air Fryer" },
+  { value: "oven",         label: "Oven" },
+  { value: "stovetop",     label: "Stovetop" },
+  { value: "instant-pot",  label: "Instant Pot" },
+  { value: "slow-cooker",  label: "Slow Cooker" },
+  { value: "grill",        label: "Grill" },
+  { value: "no-cook",      label: "No Cook" },
+  { value: "air-fryer",    label: "Air Fryer" },
 ];
+
+const UNIT_OPTIONS = [
+  { group: "Weight",  units: ["g", "kg", "oz", "lb"] },
+  { group: "Volume",  units: ["ml", "L", "tsp", "tbsp", "cup"] },
+  { group: "Count",   units: ["piece", "slice", "clove", "can", "head", "sheet", "bunch"] },
+  { group: "Other",   units: ["handful", "pinch", "to taste", "as needed"] },
+] as const;
 
 // ── Shared style tokens ───────────────────────────────────────────────────────
 
@@ -51,24 +39,33 @@ const inputCls =
 
 const labelCls = "block text-sm font-medium text-gray-700 mb-1";
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
-type Ingredient = { quantity: string; name: string };
+type Ingredient = { amount: string; unit: string; name: string };
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function AddRecipeForm() {
   const [state, formAction, isPending] = useActionState(createRecipe, null);
 
-  // Controlled only for the fields that need client logic
   const [name, setName] = useState("");
   const [nameError, setNameError] = useState("");
   const [ingredients, setIngredients] = useState<Ingredient[]>([
-    { quantity: "", name: "" },
+    { amount: "", unit: "", name: "" },
   ]);
-  const [cuisines, setCuisines] = useState<string[]>([]);
 
-  // Ingredient helpers
+  // Confirmed cuisine pairings (up to 2)
+  const [cuisines, setCuisines] = useState<CuisinePairing[]>([]);
+  // Whether the region/style picker is open
+  const [pickerOpen, setPickerOpen] = useState(true);
+  // Which slot the picker is editing (== cuisines.length when adding new)
+  const [pickerIndex, setPickerIndex] = useState(0);
+  // Selected region in the currently open picker
+  const [pickerRegion, setPickerRegion] = useState<string | null>(null);
+
+  // ── Ingredient helpers ────────────────────────────────────────────────────
   const addIngredient = () =>
-    setIngredients((prev) => [...prev, { quantity: "", name: "" }]);
+    setIngredients((prev) => [...prev, { amount: "", unit: "", name: "" }]);
   const removeIngredient = (i: number) =>
     setIngredients((prev) => prev.filter((_, idx) => idx !== i));
   const updateIngredient = (i: number, field: keyof Ingredient, val: string) =>
@@ -76,18 +73,42 @@ export default function AddRecipeForm() {
       prev.map((ing, idx) => (idx === i ? { ...ing, [field]: val } : ing))
     );
 
-  // Cuisine toggle — max 2
-  const toggleCuisine = (region: string) => {
-    setCuisines((prev) =>
-      prev.includes(region)
-        ? prev.filter((c) => c !== region)
-        : prev.length < 2
-        ? [...prev, region]
-        : prev
-    );
+  // ── Cuisine helpers ───────────────────────────────────────────────────────
+  const pickStyle = (style: string) => {
+    if (!pickerRegion) return;
+    const pairing: CuisinePairing = { region: pickerRegion, style };
+    if (pickerIndex < cuisines.length) {
+      // Editing existing
+      setCuisines((prev) => prev.map((c, i) => (i === pickerIndex ? pairing : c)));
+    } else {
+      // Adding new
+      setCuisines((prev) => [...prev, pairing]);
+    }
+    setPickerOpen(false);
+    setPickerRegion(null);
   };
 
-  // Client-side name validation before submit
+  const editCuisine = (i: number) => {
+    setPickerIndex(i);
+    setPickerRegion(cuisines[i].region);
+    setPickerOpen(true);
+  };
+
+  const removeCuisine = (i: number) => {
+    setCuisines((prev) => prev.filter((_, idx) => idx !== i));
+    if (pickerOpen && pickerIndex === i) {
+      setPickerOpen(false);
+      setPickerRegion(null);
+    }
+  };
+
+  const openAddPicker = () => {
+    setPickerIndex(cuisines.length);
+    setPickerRegion(null);
+    setPickerOpen(true);
+  };
+
+  // ── Form submit ───────────────────────────────────────────────────────────
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     if (!name.trim()) {
       e.preventDefault();
@@ -98,19 +119,18 @@ export default function AddRecipeForm() {
     setNameError("");
   };
 
-  // Serialised ingredients for the hidden input
   const ingredientsJson = JSON.stringify(
     ingredients
       .filter((i) => i.name.trim())
       .map((i) => ({
         name: i.name.trim(),
-        ...(i.quantity.trim() ? { quantity: i.quantity.trim() } : {}),
+        ...(i.amount.trim() ? { amount: i.amount.trim() } : {}),
+        ...(i.unit ? { unit: i.unit } : {}),
       }))
   );
 
   return (
     <form action={formAction} onSubmit={handleSubmit} className="space-y-5">
-      {/* Server-action error fallback */}
       {state?.error && (
         <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
           {state.error}
@@ -120,7 +140,6 @@ export default function AddRecipeForm() {
       {/* ── Recipe Info ── */}
       <FormSection title="Recipe Info">
         <div className="space-y-4">
-          {/* Name */}
           <div>
             <label className={labelCls} htmlFor="name">
               Recipe Name <span className="text-red-500">*</span>
@@ -137,15 +156,12 @@ export default function AddRecipeForm() {
               placeholder="e.g. Pasta Carbonara"
               className={inputCls}
             />
-            {nameError && (
-              <p className="mt-1 text-sm text-red-600">{nameError}</p>
-            )}
+            {nameError && <p className="mt-1 text-sm text-red-600">{nameError}</p>}
           </div>
 
-          {/* Main components */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <Field label="Main Protein" name="mainProtein" placeholder="e.g. chicken" />
-            <Field label="Main Starch" name="mainStarch" placeholder="e.g. pasta" />
+            <Field label="Main Protein"   name="mainProtein"   placeholder="e.g. chicken" />
+            <Field label="Main Starch"    name="mainStarch"    placeholder="e.g. pasta" />
             <Field label="Main Vegetable" name="mainVegetable" placeholder="e.g. spinach" />
           </div>
         </div>
@@ -159,10 +175,24 @@ export default function AddRecipeForm() {
               <input
                 type="text"
                 placeholder="Qty"
-                value={ing.quantity}
-                onChange={(e) => updateIngredient(i, "quantity", e.target.value)}
-                className={`${inputCls} w-28 flex-shrink-0`}
+                value={ing.amount}
+                onChange={(e) => updateIngredient(i, "amount", e.target.value)}
+                className="w-14 flex-shrink-0 rounded-lg border border-gray-300 px-2 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition text-center"
               />
+              <select
+                value={ing.unit}
+                onChange={(e) => updateIngredient(i, "unit", e.target.value)}
+                className="w-[100px] flex-shrink-0 rounded-lg border border-gray-300 px-2 py-2 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition"
+              >
+                <option value="">— unit —</option>
+                {UNIT_OPTIONS.map(({ group, units }) => (
+                  <optgroup key={group} label={group}>
+                    {units.map((u) => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
               <input
                 type="text"
                 placeholder="Ingredient name"
@@ -182,7 +212,6 @@ export default function AddRecipeForm() {
               )}
             </div>
           ))}
-
           <button
             type="button"
             onClick={addIngredient}
@@ -212,41 +241,131 @@ export default function AddRecipeForm() {
             />
           </div>
 
-          {/* Cuisine — max 2 pill-toggles */}
+          {/* ── Cuisine picker ── */}
           <div>
             <p className={labelCls}>
               Cuisine{" "}
               <span className="font-normal text-gray-400 text-xs">
-                (pick up to 2 regions)
+                (up to 2 pairings — great for fusion dishes)
               </span>
             </p>
-            <div className="flex flex-wrap gap-2 mt-1.5">
-              {CUISINE_REGIONS.map((region) => {
-                const checked = cuisines.includes(region);
-                const disabled = !checked && cuisines.length >= 2;
-                return (
+
+            {/* Confirmed chips */}
+            <div className="flex flex-wrap gap-2 mb-3">
+              {cuisines.map((c, i) => (
+                <span
+                  key={i}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-full text-sm text-blue-800 font-medium"
+                >
+                  {c.region} ▸ {c.style}
                   <button
-                    key={region}
                     type="button"
-                    onClick={() => toggleCuisine(region)}
-                    disabled={disabled}
-                    className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-all ${
-                      checked
-                        ? "bg-blue-600 text-white border-blue-600 shadow-sm"
-                        : disabled
-                        ? "bg-gray-50 text-gray-300 border-gray-200 cursor-not-allowed"
-                        : "bg-white text-gray-700 border-gray-300 hover:border-blue-400 hover:text-blue-700"
-                    }`}
+                    onClick={() => editCuisine(i)}
+                    aria-label="Edit cuisine"
+                    className="ml-0.5 text-blue-400 hover:text-blue-700 transition-colors leading-none"
+                    title="Edit"
                   >
-                    {region}
+                    ✏
                   </button>
-                );
-              })}
+                  <button
+                    type="button"
+                    onClick={() => removeCuisine(i)}
+                    aria-label="Remove cuisine"
+                    className="text-blue-300 hover:text-red-500 transition-colors leading-none"
+                    title="Remove"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+
+              {/* Add second pairing link */}
+              {!pickerOpen && cuisines.length === 1 && (
+                <button
+                  type="button"
+                  onClick={openAddPicker}
+                  className="text-sm text-blue-500 hover:text-blue-700 underline decoration-dotted transition-colors"
+                >
+                  + Add another cuisine (for fusion dishes)
+                </button>
+              )}
             </div>
-            {/* Hidden inputs carry the selection into FormData */}
-            {cuisines.map((c) => (
-              <input key={c} type="hidden" name="cuisine" value={c} />
-            ))}
+
+            {/* Picker — shown when adding/editing */}
+            {pickerOpen && (
+              <div className="rounded-xl border border-blue-100 bg-blue-50/30 p-4 space-y-3">
+                <p className="text-xs font-semibold text-blue-500 uppercase tracking-wide">
+                  {pickerIndex < cuisines.length ? "Edit cuisine" : cuisines.length === 0 ? "Select a cuisine" : "Add second cuisine"}
+                </p>
+
+                {/* Region pills — unselected are smaller/muted when one is active */}
+                <div className="flex flex-wrap gap-1.5">
+                  {CUISINE_REGIONS.map(({ region }) => {
+                    const isActive = pickerRegion === region;
+                    const isMuted = pickerRegion !== null && !isActive;
+                    return (
+                      <button
+                        key={region}
+                        type="button"
+                        onClick={() => setPickerRegion(region)}
+                        className={`rounded-full border font-medium transition-all ${
+                          isActive
+                            ? "px-3 py-1.5 text-sm bg-blue-600 text-white border-blue-600 shadow-sm"
+                            : isMuted
+                            ? "px-2 py-1 text-[11px] bg-white text-gray-400 border-gray-200 hover:border-blue-300 hover:text-gray-600"
+                            : "px-3 py-1.5 text-sm bg-white text-gray-700 border-gray-300 hover:border-blue-400 hover:text-blue-700"
+                        }`}
+                      >
+                        {region}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Style chips — shown after a region is selected */}
+                {pickerRegion && (
+                  <div className="pt-1 pl-3 border-l-2 border-blue-300">
+                    <p className="text-xs text-blue-500 font-semibold mb-2">{pickerRegion}</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(regionToStyles[pickerRegion] ?? []).map((style) => (
+                        <button
+                          key={style}
+                          type="button"
+                          onClick={() => pickStyle(style)}
+                          className="px-3 py-1 rounded-full text-sm border bg-white text-gray-700 border-gray-300 hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all"
+                        >
+                          {style}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {pickerOpen && (
+                  <button
+                    type="button"
+                    onClick={() => { setPickerOpen(false); setPickerRegion(null); }}
+                    className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Show "Select cuisine" prompt if nothing set yet and picker is closed */}
+            {!pickerOpen && cuisines.length === 0 && (
+              <button
+                type="button"
+                onClick={() => { setPickerOpen(true); setPickerIndex(0); setPickerRegion(null); }}
+                className="text-sm text-blue-500 hover:text-blue-700 underline decoration-dotted"
+              >
+                + Select cuisine
+              </button>
+            )}
+
+            {/* Hidden input carries the cuisine JSON into FormData */}
+            <input type="hidden" name="cuisineJson" value={JSON.stringify(cuisines)} />
           </div>
 
           <CheckboxGroup label="Season" name="season" options={SEASONS} />
@@ -256,12 +375,9 @@ export default function AddRecipeForm() {
       {/* ── Cooking Details ── */}
       <FormSection title="Cooking Details">
         <div className="space-y-5">
-          {/* Difficulty + Prep Time side-by-side */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className={labelCls} htmlFor="difficulty">
-                Difficulty
-              </label>
+              <label className={labelCls} htmlFor="difficulty">Difficulty</label>
               <select
                 id="difficulty"
                 name="difficulty"
@@ -274,9 +390,7 @@ export default function AddRecipeForm() {
               </select>
             </div>
             <div>
-              <label className={labelCls} htmlFor="prepTime">
-                Estimated Time
-              </label>
+              <label className={labelCls} htmlFor="prepTime">Estimated Time</label>
               <div className="flex items-center gap-2">
                 <input
                   id="prepTime"
@@ -306,16 +420,11 @@ export default function AddRecipeForm() {
         <div className="space-y-5">
           <CheckboxGroup label="Flavor Notes" name="flavorNotes" options={FLAVOR_NOTES} />
 
-          {/* Favourite toggle */}
           <div>
             <p className={labelCls}>Favourite</p>
             <label className="inline-flex items-center gap-3 cursor-pointer select-none">
               <div className="relative w-10 h-6 flex-shrink-0">
-                <input
-                  type="checkbox"
-                  name="favorite"
-                  className="sr-only peer"
-                />
+                <input type="checkbox" name="favorite" className="sr-only peer" />
                 <div className="absolute inset-0 bg-gray-200 rounded-full transition-colors peer-checked:bg-orange-500" />
                 <div className="absolute left-1 top-1 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4" />
               </div>
@@ -341,13 +450,7 @@ export default function AddRecipeForm() {
 
 // ── Presentational sub-components ────────────────────────────────────────────
 
-function FormSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="bg-white rounded-2xl border border-orange-100 shadow-sm overflow-hidden">
       <div className="px-6 py-3 bg-orange-50 border-b border-orange-100">
@@ -360,18 +463,10 @@ function FormSection({
   );
 }
 
-function Field({
-  label,
-  name,
-  placeholder,
-}: {
-  label: string;
-  name: string;
-  placeholder?: string;
-}) {
+function Field({ label, name, placeholder }: { label: string; name: string; placeholder?: string }) {
   return (
     <div>
-      <label className={labelCls} htmlFor={name}>
+      <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor={name}>
         {label}
       </label>
       <input
@@ -379,7 +474,7 @@ function Field({
         name={name}
         type="text"
         placeholder={placeholder}
-        className={inputCls}
+        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition"
       />
     </div>
   );
@@ -398,7 +493,7 @@ function CheckboxGroup({
 }) {
   return (
     <div>
-      <p className={labelCls}>{label}</p>
+      <p className="block text-sm font-medium text-gray-700 mb-1">{label}</p>
       <div className="flex flex-wrap gap-x-5 gap-y-2.5 mt-1.5">
         {options.map((value, i) => (
           <label

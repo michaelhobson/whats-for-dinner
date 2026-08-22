@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { parseRecipe, difficultyStyle, ParsedRecipe } from "@/lib/recipe-utils";
+import { parseRecipe, difficultyStyle, ingredientQty, ParsedRecipe } from "@/lib/recipe-utils";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -51,9 +51,9 @@ export default async function RecipeDetailPage({
               {t}
             </Chip>
           ))}
-          {recipe.cuisine.map((c) => (
-            <Chip key={c} color="blue">
-              {c}
+          {recipe.cuisine.map((p, i) => (
+            <Chip key={i} color="blue">
+              {p.region} › {p.style}
             </Chip>
           ))}
           {recipe.dishCategory && (
@@ -92,8 +92,8 @@ export default async function RecipeDetailPage({
                 <li key={i} className="flex items-baseline gap-3">
                   <span className="w-1.5 h-1.5 rounded-full bg-orange-400 flex-shrink-0 mt-[7px]" />
                   <span className="text-gray-700">
-                    {ing.quantity && (
-                      <span className="font-semibold text-gray-900">{ing.quantity} </span>
+                    {ingredientQty(ing) && (
+                      <span className="font-semibold text-gray-900">{ingredientQty(ing)} </span>
                     )}
                     {ing.name}
                   </span>

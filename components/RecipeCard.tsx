@@ -42,12 +42,12 @@ export default function RecipeCard({ recipe }: { recipe: ParsedRecipe }) {
 
         {/* Cuisine */}
         <div className="flex flex-wrap gap-1">
-          {recipe.cuisine.map((c) => (
+          {recipe.cuisine.map((p, i) => (
             <span
-              key={c}
+              key={i}
               className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-medium"
             >
-              {c}
+              {p.style}
             </span>
           ))}
         </div>

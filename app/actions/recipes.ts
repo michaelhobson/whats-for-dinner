@@ -41,7 +41,8 @@ export async function createRecipe(
       difficulty,
       prepTime,
       mealType: multi("mealType"),
-      cuisine: multi("cuisine"),
+      // cuisineJson is a JSON string: [{region, style}, ...] — stored as-is in the String column
+      cuisine: (formData.get("cuisineJson") as string | null) ?? "[]",
       flavorNotes: multi("flavorNotes"),
       season: multi("season"),
       cookingMethod: multi("cookingMethod"),

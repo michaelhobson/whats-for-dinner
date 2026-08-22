@@ -64,10 +64,10 @@ A feature/phase is done when:
 
 - [x] Phase 0 — Project setup
 - [x] Phase 1 — Data model
-- [ ] Phase 2 — Recipe browsing
-- [ ] Phase 3 — Add recipe form
-- [ ] Phase 4 — Randomizer logic
-- [ ] Phase 5 — Randomizer reveal animation
+- [x] Phase 2 — Recipe browsing
+- [x] Phase 3 — Add recipe form
+- [x] Phase 4 — Randomizer logic
+- [x] Phase 5 — Randomizer reveal animation
 - [ ] Phase 6 — Polish pass
 
 ## 8. Non-Goals / Out of Scope (for now)
