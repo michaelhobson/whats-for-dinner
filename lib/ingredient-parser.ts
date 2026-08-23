@@ -48,7 +48,7 @@ const UNIT_MAP: Record<string, string> = {
   package: "piece", packages: "piece", pkg: "piece",
 };
 
-function normalizeUnit(raw: string): string {
+export function normalizeUnit(raw: string): string {
   const key = raw.toLowerCase().replace(/\.+$/, ""); // strip trailing dots
   return UNIT_MAP[key] ?? raw; // unrecognized → keep raw (user can adjust in form)
 }
