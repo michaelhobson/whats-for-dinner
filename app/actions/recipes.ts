@@ -67,6 +67,7 @@ export async function createRecipe(
       flavorNotes:   multi("flavorNotes"),
       season:        multi("season"),
       cookingMethod: multi("cookingMethod"),
+      sourceUrl:     raw("sourceUrl"),
     },
   });
 

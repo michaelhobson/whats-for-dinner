@@ -57,7 +57,8 @@ export default function AddRecipeForm({
 }) {
   const [state, formAction, isPending] = useActionState(serverAction, null);
 
-  const isEdit = initialData != null;
+  // id > 0 means editing an existing saved recipe; id === 0 means pre-filled from import (still a create)
+  const isEdit = (initialData?.id ?? 0) > 0;
 
   const [name, setName] = useState(initialData?.name ?? "");
   const [nameError, setNameError] = useState("");
@@ -171,7 +172,11 @@ export default function AddRecipeForm({
   return (
     <form action={formAction} onSubmit={handleSubmit} className="space-y-5">
       {/* Hidden id for edit mode */}
-      {isEdit && <input type="hidden" name="id" value={initialData.id} />}
+      {isEdit && <input type="hidden" name="id" value={initialData!.id} />}
+      {/* Hidden sourceUrl — set when recipe was imported from a URL */}
+      {initialData?.sourceUrl && (
+        <input type="hidden" name="sourceUrl" value={initialData.sourceUrl} />
+      )}
 
       {state?.error && (
         <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">

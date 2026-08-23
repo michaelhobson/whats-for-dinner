@@ -46,6 +46,12 @@ model Recipe {
   // Free-text notes (e.g. "use less salt next time")
   notes         String?
 
+  // Provenance — populated by URL import; forkedFromRecipeId reserved for future cross-kitchen sharing
+  sourceUrl          String?
+  forkedFromRecipeId Int?
+  forkedFrom         Recipe?    @relation("RecipeForks", fields: [forkedFromRecipeId], references: [id])
+  forks              Recipe[]   @relation("RecipeForks")
+
   cookHistory   CookLog[]
 
   createdAt     DateTime   @default(now())

@@ -33,6 +33,8 @@ export type ParsedRecipe = {
   cookingMethod: string[];
   rating: Rating;
   notes: string | null;
+  sourceUrl: string | null;
+  forkedFromRecipeId: number | null;
   createdAt: Date;
   updatedAt: Date;
 };
