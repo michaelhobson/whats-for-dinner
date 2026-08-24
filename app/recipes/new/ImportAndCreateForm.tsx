@@ -7,10 +7,9 @@ import { createRecipe } from "@/app/actions/recipes";
 import AddRecipeForm from "./AddRecipeForm";
 import { ParsedRecipe } from "@/lib/recipe-utils";
 
-// Resize the image in-browser so its longest edge ≤ 1568 px (the resolution
-// Claude's vision models use internally), then re-encode as JPEG at 80%.
-// Only downscales — never upscales a smaller image.
-// Returns a Blob ready to append to FormData.
+// ── Image compression ─────────────────────────────────────────────────────────
+// Resize in-browser so the longest edge ≤ 1568 px (Claude vision models resize
+// to this internally anyway), re-encode as JPEG at 80%. Only downscales.
 async function compressImage(file: File): Promise<Blob> {
   const MAX_EDGE = 1568;
   const QUALITY = 0.8;
@@ -23,25 +22,16 @@ async function compressImage(file: File): Promise<Blob> {
       URL.revokeObjectURL(objectUrl);
 
       let { naturalWidth: w, naturalHeight: h } = img;
-
       if (w > MAX_EDGE || h > MAX_EDGE) {
-        if (w >= h) {
-          h = Math.round((h * MAX_EDGE) / w);
-          w = MAX_EDGE;
-        } else {
-          w = Math.round((w * MAX_EDGE) / h);
-          h = MAX_EDGE;
-        }
+        if (w >= h) { h = Math.round((h * MAX_EDGE) / w); w = MAX_EDGE; }
+        else         { w = Math.round((w * MAX_EDGE) / h); h = MAX_EDGE; }
       }
 
       const canvas = document.createElement("canvas");
       canvas.width = w;
       canvas.height = h;
       const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        reject(new Error("Canvas context unavailable"));
-        return;
-      }
+      if (!ctx) { reject(new Error("Canvas context unavailable")); return; }
       ctx.drawImage(img, 0, 0, w, h);
       canvas.toBlob(
         (blob) => (blob ? resolve(blob) : reject(new Error("toBlob failed"))),
@@ -50,19 +40,29 @@ async function compressImage(file: File): Promise<Blob> {
       );
     };
 
-    img.onerror = () => {
-      URL.revokeObjectURL(objectUrl);
-      reject(new Error("Image failed to load"));
-    };
-
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error("Image failed to load")); };
     img.src = objectUrl;
   });
 }
 
-// Build a ParsedRecipe shell from import data so AddRecipeForm can use it.
-// id=0 signals "create mode" (AddRecipeForm checks id > 0 for edit mode).
-// Tag fields (mealType, cuisine, flavorNotes, season, cookingMethod) are left
-// empty intentionally — the user fills those in manually after import.
+// ── Photo staging ─────────────────────────────────────────────────────────────
+
+type PhotoEntry = {
+  id: string;
+  file: File;
+  previewUrl: string; // object URL, revoked on removal or after successful import
+};
+
+const MAX_PHOTOS = 5;
+const VALID_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+
+function isValidImageType(file: File): boolean {
+  return VALID_IMAGE_TYPES.has(file.type.toLowerCase().replace("image/jpg", "image/jpeg"));
+}
+
+// ── Initial data conversion ───────────────────────────────────────────────────
+// Build a ParsedRecipe shell so AddRecipeForm can pre-fill. id=0 → create mode.
+// Tag fields are left empty on purpose — the user fills them in before saving.
 function toInitialData(recipe: {
   name: string;
   ingredients: { name: string; amount?: string; unit?: string }[];
@@ -101,7 +101,10 @@ type LastImport =
   | { type: "photo"; recipe: ImportedPhotoData }
   | null;
 
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export function ImportAndCreateForm() {
+  // ── Import actions ──
   const [importUrlState, importUrlAction, isImportingUrl] = useActionState<
     ImportUrlState,
     FormData
@@ -110,8 +113,8 @@ export function ImportAndCreateForm() {
   const [importPhotoState, importPhotoAction, isImportingPhoto] =
     useActionState<ImportPhotoState, FormData>(importFromPhoto, null);
 
-  // Track which import ran most recently so the form always reflects the latest.
-  // A ref-based serial ensures a unique key even for repeated imports of the same recipe.
+  // ── Which import filled the form most recently ──
+  // Serial ref gives a unique key even when the same recipe is imported twice.
   const importSerialRef = useRef(0);
   const [lastImport, setLastImport] = useState<LastImport>(null);
   const [formKey, setFormKey] = useState("__manual__");
@@ -129,38 +132,90 @@ export function ImportAndCreateForm() {
       importSerialRef.current += 1;
       setLastImport({ type: "photo", recipe: importPhotoState.recipe });
       setFormKey(`photo:${importSerialRef.current}`);
+      // Revoke all preview URLs and clear staged photos after a successful import
+      setPhotos((prev) => { prev.forEach((p) => URL.revokeObjectURL(p.previewUrl)); return []; });
     }
   }, [importPhotoState]);
 
   const initialData = lastImport ? toInitialData(lastImport.recipe) : undefined;
 
+  // ── Photo staging state ──
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const [photos, setPhotos] = useState<PhotoEntry[]>([]);
   const [compressing, setCompressing] = useState(false);
+  const [compressionProgress, setCompressionProgress] = useState<string | null>(null);
   const [compressError, setCompressError] = useState<string | null>(null);
 
-  async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const selected = Array.from(e.target.files ?? []).filter(isValidImageType);
+    setPhotos((prev) => {
+      const slots = MAX_PHOTOS - prev.length;
+      const toAdd = selected.slice(0, slots).map((file) => ({
+        id: crypto.randomUUID(),
+        file,
+        previewUrl: URL.createObjectURL(file),
+      }));
+      return [...prev, ...toAdd];
+    });
+  }
+
+  function removePhoto(id: string) {
+    setPhotos((prev) => {
+      const entry = prev.find((p) => p.id === id);
+      if (entry) URL.revokeObjectURL(entry.previewUrl);
+      return prev.filter((p) => p.id !== id);
+    });
+  }
+
+  function movePhoto(id: string, direction: -1 | 1) {
+    setPhotos((prev) => {
+      const idx = prev.findIndex((p) => p.id === id);
+      const next = idx + direction;
+      if (idx < 0 || next < 0 || next >= prev.length) return prev;
+      const arr = [...prev];
+      [arr[idx], arr[next]] = [arr[next], arr[idx]];
+      return arr;
+    });
+  }
+
+  async function handleImport() {
+    if (photos.length === 0) return;
     setCompressError(null);
     setCompressing(true);
     try {
-      const blob = await compressImage(file);
       const fd = new FormData();
-      // Keep a .jpg extension regardless of original; MIME type comes from the Blob.
-      const stem = file.name.replace(/\.[^.]+$/, "");
-      fd.append("image", blob, `${stem}.jpg`);
+      for (let i = 0; i < photos.length; i++) {
+        setCompressionProgress(
+          photos.length > 1
+            ? `Compressing photo ${i + 1} of ${photos.length}…`
+            : "Compressing image…"
+        );
+        const blob = await compressImage(photos[i].file);
+        const stem = photos[i].file.name.replace(/\.[^.]+$/, "");
+        fd.append("image", blob, `${stem}.jpg`);
+      }
       importPhotoAction(fd);
     } catch {
-      setCompressError("Couldn't process that image — please try a different photo.");
+      setCompressError("Couldn't process one or more images — please try different photos.");
     } finally {
       setCompressing(false);
+      setCompressionProgress(null);
     }
   }
 
+  const isPhotoWorking = compressing || isImportingPhoto;
+  const photoButtonLabel = compressing
+    ? (compressionProgress ?? "Compressing…")
+    : isImportingPhoto
+      ? `Reading photo${photos.length !== 1 ? "s" : ""}…`
+      : `Import ${photos.length} photo${photos.length !== 1 ? "s" : ""}`;
+
+  // ── Render ──
   return (
     <div className="space-y-6">
-      {/* ── Import options ── */}
-      <div className="grid gap-4 sm:grid-cols-2">
+      {/* Import options — side-by-side on wider screens, stacked on mobile */}
+      <div className="grid gap-4 sm:grid-cols-2 items-start">
+
         {/* URL import */}
         <div className="bg-white rounded-2xl border border-orange-100 shadow-sm overflow-hidden">
           <div className="px-5 py-3 bg-orange-50 border-b border-orange-100">
@@ -170,8 +225,7 @@ export function ImportAndCreateForm() {
           </div>
           <div className="p-5 space-y-3">
             <p className="text-sm text-gray-500">
-              Paste a link to any recipe page and we&apos;ll pre-fill what we
-              can find.
+              Paste a link to any recipe page and we&apos;ll pre-fill what we can find.
             </p>
             <form action={importUrlAction} className="flex gap-2">
               <input
@@ -188,14 +242,11 @@ export function ImportAndCreateForm() {
                 {isImportingUrl ? "Fetching…" : "Import"}
               </button>
             </form>
-
             {importUrlState?.ok === false && (
               <p className="text-sm text-red-600">{importUrlState.error}</p>
             )}
             {importUrlState?.ok === true && lastImport?.type === "url" && (
-              <p className="text-sm text-green-700">
-                ✓ Recipe found — form pre-filled below.
-              </p>
+              <p className="text-sm text-green-700">✓ Recipe found — form pre-filled below.</p>
             )}
           </div>
         </div>
@@ -209,33 +260,107 @@ export function ImportAndCreateForm() {
           </div>
           <div className="p-5 space-y-3">
             <p className="text-sm text-gray-500">
-              Upload a photo of a recipe card, cookbook page, or handwritten
-              recipe.
+              Upload up to {MAX_PHOTOS} photos of a recipe card, cookbook pages, or handwritten recipe.
+              Arrange them in reading order before importing.
             </p>
-            {/* Hidden file input — triggered by the visible button below */}
+
+            {/* Hidden file input — triggered by the button below */}
             <input
               ref={photoInputRef}
               type="file"
               accept="image/jpeg,image/jpg,image/png,image/gif,image/webp,image/*"
+              multiple
               className="sr-only"
-              onChange={handlePhotoChange}
+              onChange={handleFileSelect}
             />
-            <button
-              type="button"
-              onClick={() => {
-                // Reset so the same file can be re-selected if needed
-                if (photoInputRef.current) photoInputRef.current.value = "";
-                photoInputRef.current?.click();
-              }}
-              disabled={compressing || isImportingPhoto}
-              className="w-full px-4 py-2 text-sm font-semibold bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-lg transition-colors"
-            >
-              {compressing
-                ? "Compressing image…"
-                : isImportingPhoto
-                  ? "Reading photo…"
-                  : "Choose photo"}
-            </button>
+
+            {/* Staged photo thumbnails */}
+            {photos.length > 0 && (
+              <ul className="space-y-2">
+                {photos.map((photo, idx) => (
+                  <li
+                    key={photo.id}
+                    className="flex items-center gap-2 p-2 bg-orange-50 rounded-xl border border-orange-100"
+                  >
+                    {/* Thumbnail */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photo.previewUrl}
+                      alt={`Page ${idx + 1}`}
+                      className="w-12 h-12 object-cover rounded-lg flex-shrink-0"
+                    />
+
+                    {/* Page label */}
+                    <span className="flex-1 text-sm text-gray-600 font-medium">
+                      Page {idx + 1}
+                    </span>
+
+                    {/* Reorder + remove controls */}
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => movePhoto(photo.id, -1)}
+                        disabled={idx === 0 || isPhotoWorking}
+                        aria-label="Move up"
+                        className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-orange-600 hover:bg-orange-100 disabled:opacity-30 transition-colors text-xs font-bold"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => movePhoto(photo.id, 1)}
+                        disabled={idx === photos.length - 1 || isPhotoWorking}
+                        aria-label="Move down"
+                        className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-orange-600 hover:bg-orange-100 disabled:opacity-30 transition-colors text-xs font-bold"
+                      >
+                        ↓
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removePhoto(photo.id)}
+                        disabled={isPhotoWorking}
+                        aria-label="Remove photo"
+                        className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 disabled:opacity-30 transition-colors text-sm"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {/* Action buttons */}
+            <div className={`flex gap-2 ${photos.length > 0 ? "flex-wrap" : ""}`}>
+              {/* Add photos button — shown while slots remain */}
+              {photos.length < MAX_PHOTOS && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (photoInputRef.current) photoInputRef.current.value = "";
+                    photoInputRef.current?.click();
+                  }}
+                  disabled={isPhotoWorking}
+                  className={`${photos.length === 0 ? "w-full" : "flex-1"} px-4 py-2 text-sm font-semibold border-2 border-orange-400 text-orange-600 hover:bg-orange-50 disabled:opacity-50 rounded-lg transition-colors`}
+                >
+                  {photos.length === 0
+                    ? "Choose photos"
+                    : `+ Add page (${photos.length}/${MAX_PHOTOS})`}
+                </button>
+              )}
+
+              {/* Import button — shown when at least one photo is staged */}
+              {photos.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleImport}
+                  disabled={isPhotoWorking}
+                  className="flex-1 px-4 py-2 text-sm font-semibold bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white rounded-lg transition-colors whitespace-nowrap"
+                >
+                  {photoButtonLabel}
+                </button>
+              )}
+            </div>
 
             {compressError && (
               <p className="text-sm text-red-600">{compressError}</p>
@@ -252,9 +377,9 @@ export function ImportAndCreateForm() {
         </div>
       </div>
 
-      {/* ── Add-recipe form (pre-filled on import, blank otherwise) ── */}
-      {/* key remounts AddRecipeForm whenever a new import lands so
-          controlled state (name, ingredients, directions) reinitialises */}
+      {/* Add-recipe form (pre-filled on import, blank otherwise).
+          key remounts the form whenever a new import lands so controlled
+          state (name, ingredients, directions) reinitialises. */}
       <AddRecipeForm
         key={formKey}
         serverAction={createRecipe}

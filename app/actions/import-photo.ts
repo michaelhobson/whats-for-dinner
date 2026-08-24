@@ -19,9 +19,29 @@ export type ImportPhotoState =
 const SUPPORTED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
 type SupportedType = (typeof SUPPORTED_TYPES)[number];
 
-const EXTRACTION_PROMPT = `Extract the recipe from this image as structured JSON.
+function normalizeType(raw: string): SupportedType | null {
+  const t = raw.toLowerCase().replace("image/jpg", "image/jpeg");
+  return (SUPPORTED_TYPES as readonly string[]).includes(t) ? (t as SupportedType) : null;
+}
 
-Return ONLY this JSON object, no markdown, no explanation:
+// Prompt adapts based on how many pages were submitted.
+// When images are blurry on some pages the model is instructed to still
+// extract what it can, so the error only fires when ALL pages fail.
+function buildPrompt(imageCount: number): string {
+  const multi = imageCount > 1;
+  return `Extract the complete recipe from the following ${imageCount} image${multi ? "s" : ""}${multi ? ", which show sequential pages of a single recipe" : ""}.
+
+${
+  multi
+    ? `Combine information from all pages into one result:
+- Merge ingredients across all pages into a single list; omit exact duplicates
+- Combine directions in page order
+- If a page is blurry or unreadable, extract what you can from the remaining pages
+- Only set "found": false when no usable recipe data could be extracted from any image
+
+`
+    : ""
+}Return ONLY this JSON object, no markdown, no explanation:
 {
   "found": true,
   "name": "recipe name",
@@ -32,37 +52,57 @@ Return ONLY this JSON object, no markdown, no explanation:
   "directions": ["Step 1 text", "Step 2 text"]
 }
 
-If you cannot confidently identify a complete recipe in the image, return exactly: {"found":false}
+If no usable recipe data can be extracted${multi ? " from any of the images" : ""}, return exactly: {"found":false}
 
-Rules:
-- "prepTime": total time in minutes (combine prep + cook if both shown), or null if not visible
-- "ingredients.amount": quantity as a string ("1", "1/2", "2-3"), or "" if not shown
-- "ingredients.unit": measurement unit ("cup", "tbsp", "tsp", "oz", "lb", "g", "clove", "pinch", etc.), or "" if not shown
-- "ingredients.name": ingredient name plus ALL descriptive text — keep "divided", "finely chopped", "to taste", etc.
-- "directions": each step as a plain-text string`;
+Field rules:
+- "prepTime": total time in minutes (combine prep + cook if listed separately), or null if not visible
+- "amount": numeric quantity as a string ("1", "1/2", "2-3"), or "" if absent
+- "unit": measurement unit (cup, tbsp, tsp, oz, lb, g, clove, pinch, etc.), or "" if absent
+- "name": ingredient name plus ALL descriptive text — keep "finely chopped", "to taste", "divided", etc.
+- "directions": each step as a separate plain-text string`;
+}
 
 export async function importFromPhoto(
   _prev: ImportPhotoState,
   formData: FormData
 ): Promise<ImportPhotoState> {
-  const file = formData.get("image") as File | null;
-  if (!file || file.size === 0) return { ok: false, error: "No image selected." };
+  const files = formData.getAll("image") as File[];
 
-  if (file.size > 10 * 1024 * 1024) {
-    return { ok: false, error: "Image too large — please use an image under 10 MB." };
+  if (files.length === 0 || files.every((f) => f.size === 0)) {
+    return { ok: false, error: "No images selected." };
+  }
+  if (files.length > 5) {
+    return { ok: false, error: "Please select at most 5 photos." };
   }
 
-  // Normalize image/jpg → image/jpeg (some devices report the shorter form)
-  const rawType = file.type.toLowerCase().replace("image/jpg", "image/jpeg");
-  if (!(SUPPORTED_TYPES as readonly string[]).includes(rawType)) {
-    return { ok: false, error: "Please upload a JPEG, PNG, GIF, or WebP image." };
+  // Validate each file
+  const imageEntries: { mediaType: SupportedType; data: string }[] = [];
+  for (const file of files) {
+    if (file.size > 10 * 1024 * 1024) {
+      return { ok: false, error: "One or more images exceeded 10 MB after compression." };
+    }
+    const mediaType = normalizeType(file.type);
+    if (!mediaType) {
+      return { ok: false, error: "All images must be JPEG, PNG, GIF, or WebP." };
+    }
+    const data = Buffer.from(await file.arrayBuffer()).toString("base64");
+    imageEntries.push({ mediaType, data });
   }
-  const mediaType = rawType as SupportedType;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY is not configured.");
 
-  const base64 = Buffer.from(await file.arrayBuffer()).toString("base64");
+  // Build a single message with one image block per page, then the text prompt.
+  // The model processes them in the order provided.
+  const content: Anthropic.MessageParam["content"] = [
+    ...imageEntries.map(
+      ({ mediaType, data }): Anthropic.ImageBlockParam => ({
+        type: "image",
+        source: { type: "base64", media_type: mediaType, data },
+      })
+    ),
+    { type: "text", text: buildPrompt(imageEntries.length) },
+  ];
 
   let parsed: unknown;
   try {
@@ -70,18 +110,7 @@ export async function importFromPhoto(
     const msg = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 2048,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "image",
-              source: { type: "base64", media_type: mediaType, data: base64 },
-            },
-            { type: "text", text: EXTRACTION_PROMPT },
-          ],
-        },
-      ],
+      messages: [{ role: "user", content }],
     });
 
     const block = msg.content[0];
@@ -96,7 +125,7 @@ export async function importFromPhoto(
 
     parsed = JSON.parse(text);
   } catch {
-    return { ok: false, error: "Something went wrong processing the image — please try again." };
+    return { ok: false, error: "Something went wrong processing the images — please try again." };
   }
 
   if (
@@ -107,7 +136,7 @@ export async function importFromPhoto(
     return {
       ok: false,
       error:
-        "Couldn't find a recipe in that image — try a clearer photo, or enter the recipe manually.",
+        "Couldn't find a recipe in those photos — try clearer images, or enter the recipe manually.",
     };
   }
 
@@ -117,7 +146,7 @@ export async function importFromPhoto(
     return {
       ok: false,
       error:
-        "Couldn't find a recipe in that image — try a clearer photo, or enter the recipe manually.",
+        "Couldn't find a recipe in those photos — try clearer images, or enter the recipe manually.",
     };
   }
 
