@@ -71,6 +71,10 @@ export async function createRecipe(
     },
   });
 
+  // Revalidate before redirect — redirect only streams the destination page's
+  // RSC payload and does not invalidate other cached routes on its own.
+  revalidatePath("/recipes");
+  revalidatePath("/randomize");
   redirect(`/recipes/${recipe.id}`);
 }
 
