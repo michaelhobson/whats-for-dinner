@@ -1,35 +1,15 @@
-import { NextRequest, NextResponse } from "next/server";
+import NextAuth from "next-auth";
+import { authConfig } from "./auth.config";
 
-// Must match the same logic as makeToken() in app/actions/auth.ts
-async function makeToken(passcode: string): Promise<string> {
-  const encoded = new TextEncoder().encode(passcode);
-  const hashBuf = await crypto.subtle.digest("SHA-256", encoded);
-  return [...new Uint8Array(hashBuf)]
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-
-  const passcode = process.env.PASSCODE;
-  // If no passcode is configured, allow everything through (dev convenience)
-  if (!passcode) return NextResponse.next();
-
-  const expected = await makeToken(passcode);
-  const cookie = request.cookies.get("wfd_auth")?.value;
-
-  if (cookie === expected) return NextResponse.next();
-
-  // Redirect to login, preserving the page the user tried to visit
-  const loginUrl = new URL("/login", request.url);
-  loginUrl.searchParams.set("from", pathname);
-  return NextResponse.redirect(loginUrl);
-}
+// Use the Edge-compatible split config so the middleware doesn't pull in
+// Prisma (a Node.js-only module). Full auth config lives in auth.ts.
+export default NextAuth(authConfig).auth;
 
 export const config = {
+  // Run on all paths EXCEPT Next.js internals, static files, and the auth
+  // routes themselves (/login, /api/auth). Those must stay public so users
+  // can reach the sign-in page and Auth.js can handle callbacks.
   matcher: [
-    // Run on all paths except Next.js internals, static files, and the login page itself
-    "/((?!_next/static|_next/image|favicon.ico|login).*)",
+    "/((?!_next/static|_next/image|favicon.ico|login|api/auth).*)",
   ],
 };

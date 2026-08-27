@@ -1,12 +1,21 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { parseRecipe } from "@/lib/recipe-utils";
+import { getKitchenIds } from "@/lib/kitchen";
 import RecipeCard from "@/components/RecipeCard";
 
 export const metadata = { title: "Browse Recipes — What's For Dinner?" };
 
 export default async function RecipesPage() {
-  const rows = await prisma.recipe.findMany({ orderBy: { createdAt: "desc" } });
+  const kitchenIds = await getKitchenIds();
+
+  const rows = kitchenIds.length
+    ? await prisma.recipe.findMany({
+        where: { kitchenId: { in: kitchenIds } },
+        orderBy: { createdAt: "desc" },
+      })
+    : [];
+
   const recipes = rows.map((r) => parseRecipe(r as Parameters<typeof parseRecipe>[0]));
 
   return (

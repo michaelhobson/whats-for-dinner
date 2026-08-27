@@ -16,19 +16,36 @@
 
 ## 3. Architecture & Directory Structure
 
-Standard Next.js App Router conventions apply. The layout below reflects the app's early structure — accounts, kitchens, and import features have since been added and this section has not been kept in sync. **Next time this file is touched, have Claude Code inspect the actual file tree and update this section to match reality**, rather than trusting the version below.
+Standard Next.js App Router conventions apply.
 
 ```
 /app
-  /recipes          — browse page, [id] detail page
-  /recipes/new       — add-recipe form
-  /randomize         — randomizer page
-  page.tsx           — homepage
+  /actions          — server actions: recipes.ts, import.ts, import-photo.ts, import-url.ts
+  /api/auth         — Auth.js route handler ([...nextauth]/route.ts)
+  /api/export       — GET: download kitchen recipes as JSON backup
+  /login            — magic-link sign-in form + /check-email confirmation page
+  /randomize        — randomizer page (server) + RandomizerClient (client filters + draw)
+  /recipes          — browse page; /[id] detail + edit; /new add-recipe + import form
+  /settings         — backup (export) and restore (JSON import)
+  page.tsx          — homepage
+/components         — NavBar, RecipeCard, AddRecipeForm, and other shared UI
+/lib
+  prisma.ts         — Prisma client singleton (PrismaPg adapter)
+  kitchen.ts        — getKitchenId() for writes; getKitchenIds() for reads
+  recipe-utils.ts   — ParsedRecipe type, parseRecipe(), display helpers
+  cuisine.ts        — region/style lists, CuisinePairing type
+  ingredient-parser.ts — ingredient line parsing and unit normalization
 /prisma
-  schema.prisma      — data model
-  seed.ts            — seed script for sample data
-/components          — shared UI components (nav bar, recipe card, etc.)
-/lib                 — shared helpers (e.g. Prisma client singleton, filtering logic)
+  schema.prisma     — full data model (Auth.js models, Kitchen, KitchenMembership, Recipe, CookLog)
+  seed.ts           — sample data for local development
+  migrate-kitchen.ts — one-time script to backfill kitchenId on existing recipes
+/types
+  next-auth.d.ts    — extends Session to include user.id
+
+auth.config.ts      — Edge-compatible Auth.js config (no Prisma); imported by middleware
+auth.ts             — full Auth.js config: Prisma adapter, Resend, JWT sessions
+middleware.ts       — session-based route protection (all routes except /login, /api/auth)
+prisma.config.ts    — Prisma 7 config: schema path, DATABASE_URL (not inside /prisma/)
 ```
 
 Keep data-fetching logic in server components or route handlers where possible rather than client-side fetches, per standard Next.js App Router practice.
