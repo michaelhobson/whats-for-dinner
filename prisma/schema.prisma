@@ -7,6 +7,95 @@ datasource db {
   provider = "postgresql"
 }
 
+// ── Auth.js required models ────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts    Account[]
+  sessions    Session[]
+  memberships KitchenMembership[]
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+}
+
+// Session model required by @auth/prisma-adapter even when using JWT strategy.
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+// ── Kitchen / membership models ────────────────────────────────────────────────
+
+enum KitchenRole {
+  RESTAURATEUR // owner-level: can add/edit/delete recipes
+  CHEF         // can add/edit recipes
+  DINER        // read-only
+}
+
+// A Kitchen is the unit that owns recipes. MVP: every user has exactly one
+// personal Kitchen (sole member, RESTAURATEUR). Multi-member households are
+// supported by the data model even though the UI doesn't expose switching yet.
+model Kitchen {
+  id        Int      @id @default(autoincrement())
+  name      String
+  createdAt DateTime @default(now())
+
+  recipes     Recipe[]
+  memberships KitchenMembership[]
+}
+
+// Join table linking Users to Kitchens with a role.
+model KitchenMembership {
+  userId    String
+  kitchenId Int
+  role      KitchenRole @default(RESTAURATEUR)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kitchen Kitchen @relation(fields: [kitchenId], references: [id], onDelete: Cascade)
+
+  @@id([userId, kitchenId])
+}
+
+// ── App models ─────────────────────────────────────────────────────────────────
+
 enum Difficulty {
   easy
   medium
@@ -51,6 +140,11 @@ model Recipe {
   forkedFromRecipeId Int?
   forkedFrom         Recipe?    @relation("RecipeForks", fields: [forkedFromRecipeId], references: [id])
   forks              Recipe[]   @relation("RecipeForks")
+
+  // Kitchen ownership — nullable to allow a two-step migration (add column,
+  // then run prisma/migrate-kitchen.ts to backfill, then make required in a later migration)
+  kitchenId Int?
+  kitchen   Kitchen? @relation(fields: [kitchenId], references: [id])
 
   cookHistory   CookLog[]
 

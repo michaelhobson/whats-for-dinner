@@ -1,6 +1,9 @@
 import Link from "next/link";
+import { auth, signOut } from "@/auth";
 
-export default function NavBar() {
+export default async function NavBar() {
+  const session = await auth();
+
   return (
     <header className="sticky top-0 z-10 bg-white border-b border-orange-100 shadow-sm">
       <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
@@ -37,6 +40,22 @@ export default function NavBar() {
           >
             ⚙
           </Link>
+          {session && (
+            <form
+              action={async () => {
+                "use server";
+                await signOut({ redirectTo: "/login" });
+              }}
+            >
+              <button
+                type="submit"
+                title={`Sign out (${session.user?.email ?? ""})`}
+                className="text-sm text-orange-400 hover:text-orange-600 transition-colors px-1"
+              >
+                Sign out
+              </button>
+            </form>
+          )}
         </nav>
       </div>
     </header>

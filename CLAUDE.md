@@ -62,19 +62,33 @@ A feature/phase is done when:
 - The dev server starts cleanly with `npm run dev` and the relevant page loads without a crash.
 - New fields/tags added to the data model are reflected everywhere they should appear (browse cards, detail view, add-recipe form, randomizer filters) — a tag that only exists in the database but isn't visible/filterable anywhere is not done.
 
-## 8. Current Status
+## 8. Kitchen Permission Levels
+
+Roles are scoped per KitchenMembership (a user can hold different roles in different kitchens — never treat role as a global per-user property).
+
+- **RESTAURATEUR**: Full permissions. Can change all kitchen settings (add/remove members, set member roles), and can add/edit/delete recipes (including via import), rate, write notes, and log cook history. Assume Restaurateur can do anything that's possible within a kitchen.
+- **CHEF**: Can add/edit/delete recipes (including via import), rate recipes, write notes, and log cook history. Can view kitchen settings and membership but cannot change them.
+- **DINER**: Read-only on recipes and settings/membership. Can still rate, write notes, and log cook history on recipes — these are considered low-risk personal-use actions, not content changes.
+
+All members of a kitchen, regardless of role, can view all recipes and use the randomizer/dinner-selection features.
+
+**Invariant: a kitchen must always have at least one Restaurateur.** Block the last remaining Restaurateur from demoting themselves or leaving/being removed from the kitchen. They must promote another member to Restaurateur first.
+
+**Ratings, notes, and cook history are currently shared per recipe** (one value per recipe, visible and editable by any member with permission to do so — last write wins). This is intentional for now, not an oversight.
+
+## 9. Current Status
 
 *Update this section as phases are completed, so future sessions know where things stand.*
 
 - [x] Phases 1.1-6 — Project setup, basic features, anmd initial polish
 - [x] Phase 2.1 — Foundation
 - [x] Phase 2.2 — Push to Web
-- [ ] Phase 2.3 — Import
-- [ ] Phase 2.4 Accounts ("Kitchens")
+- [x] Phase 2.3 — Import
+- [ ] Phase 2.4 — Accounts ("Kitchens")
 - [ ] Phase 2.5 — Share
 - [ ] Phase 2.6 — Planning tools
 
-## 9. Future Architecture Notes
+## 10. Future Architecture Notes
 
 These are future design considerations to be aware of that should be accounted for when making changes now.
 
@@ -82,12 +96,14 @@ These are future design considerations to be aware of that should be accounted f
 
 **Recipe provenance (planned):** Recipe has nullable `sourceUrl` and `forkedFromRecipeId` fields, unused until cross-kitchen recipe sharing is built. Keep these fields when touching the Recipe model.
 
-## 10. Non-Goals / Out of Scope (for now)
+**Global recipe pool (planned):** Will be implemented as a regular Kitchen (not a separate system), likely flagged with an isGlobalPool boolean or well-known ID. "Trusted" push access = CHEF-or-above membership in that Kitchen, granted the same way any kitchen membership is granted. "Pulling" a recipe into your own kitchen creates a new Recipe row with forkedFromRecipeId set to the original — an explicit copy, not a live sync. Do not build a parallel permissions or visibility system for this; it should reuse Kitchen/KitchenMembership entirely.
+
+**Per-person recipe feedback (planned):** Ratings, notes, and cook history will eventually become per-kitchen-member rather than a single shared value per recipe — e.g. each member's own thumbs up/down aggregating into a kitchen-wide net rating, a shared cook-history log showing who cooked what and when, and notes behaving more like a comment thread (multiple entries, attributed) rather than one shared text field. Do not build this yet; this is a marker for a future phase, not a current requirement.
+
+## 11. Non-Goals / Out of Scope (for now)
 
 We'll be adding new features over time, including in the current phases. What follows is roughly the order we'll be addding these features. Don't add these unless explicitly requested in a prompt, even if they seem like natural next steps:
 
-- Recipe importation features
-- User accounts, login, or authentication
 - Meal planning / calendar / grocery-list features
 - Additional randomization modes
 - Sharing recipes

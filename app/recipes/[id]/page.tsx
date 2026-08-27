@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { parseRecipe, difficultyStyle, ingredientQty, ParsedRecipe } from "@/lib/recipe-utils";
+import { getKitchenIds } from "@/lib/kitchen";
 import { markCooked } from "@/app/actions/recipes";
 import { DeleteRecipeButton } from "@/components/DeleteRecipeButton";
 import { RatingWidget } from "@/components/RatingWidget";
@@ -9,7 +10,13 @@ import { NotesEditor } from "@/components/NotesEditor";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const raw = await prisma.recipe.findUnique({ where: { id: Number(id) } });
+  const kitchenIds = await getKitchenIds();
+  const raw = kitchenIds.length
+    ? await prisma.recipe.findFirst({
+        where: { id: Number(id), kitchenId: { in: kitchenIds } },
+        select: { name: true },
+      })
+    : null;
   return { title: raw ? `${raw.name} — What's For Dinner?` : "Recipe not found" };
 }
 
@@ -20,9 +27,12 @@ export default async function RecipeDetailPage({
 }) {
   const { id } = await params;
   const numId = Number(id);
+  const kitchenIds = await getKitchenIds();
 
   const [raw, cookLogs] = await Promise.all([
-    prisma.recipe.findUnique({ where: { id: numId } }),
+    kitchenIds.length
+      ? prisma.recipe.findFirst({ where: { id: numId, kitchenId: { in: kitchenIds } } })
+      : Promise.resolve(null),
     prisma.cookLog.findMany({
       where: { recipeId: numId },
       orderBy: { cookedAt: "desc" },
