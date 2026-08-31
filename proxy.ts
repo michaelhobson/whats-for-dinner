@@ -1,7 +1,7 @@
 import NextAuth from "next-auth";
 import { authConfig } from "./auth.config";
 
-// Use the Edge-compatible split config so the middleware doesn't pull in
+// Use the Edge-compatible split config so the proxy doesn't pull in
 // Prisma (a Node.js-only module). Full auth config lives in auth.ts.
 export default NextAuth(authConfig).auth;
 
