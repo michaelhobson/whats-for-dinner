@@ -1,10 +1,37 @@
 "use server";
 
-import { headers } from "next/headers";
+import { headers, cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import type { KitchenRole } from "@/app/generated/prisma/client";
+
+const ACTIVE_KITCHEN_COOKIE = "active_kitchen_id";
+
+// ── Switch active kitchen ──────────────────────────────────────────────────────
+
+export async function switchKitchen(
+  kitchenId: number,
+): Promise<{ success: true } | { error: string }> {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) return { error: "Not signed in." };
+
+  const membership = await prisma.kitchenMembership.findFirst({
+    where: { userId, kitchenId },
+  });
+  if (!membership) return { error: "You are not a member of this kitchen." };
+
+  const cookieStore = await cookies();
+  cookieStore.set(ACTIVE_KITCHEN_COOKIE, String(kitchenId), {
+    path: "/",
+    httpOnly: true,
+    sameSite: "lax",
+    maxAge: 60 * 60 * 24 * 30, // 30 days
+  });
+
+  return { success: true };
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 

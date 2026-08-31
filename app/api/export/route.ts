@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getKitchenIds } from "@/lib/kitchen";
+import { getAllKitchenIds } from "@/lib/kitchen";
 
 function parseJSON<T>(s: string, fallback: T): T {
   try { return JSON.parse(s); } catch { return fallback; }
@@ -9,7 +9,7 @@ function csv(s: string): string[] {
 }
 
 export async function GET() {
-  const kitchenIds = await getKitchenIds();
+  const kitchenIds = await getAllKitchenIds();
   if (kitchenIds.length === 0) {
     return new Response("Unauthorized", { status: 401 });
   }

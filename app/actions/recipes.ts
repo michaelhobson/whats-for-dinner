@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getKitchenId, getKitchenIds } from "@/lib/kitchen";
+import { getKitchenId, getAllKitchenIds } from "@/lib/kitchen";
 
 export type RecipeFormState = { error: string } | null;
 
@@ -43,7 +43,7 @@ function parseFormData(formData: FormData) {
 // Returns null if the recipe belongs to one of the user's kitchens, or an
 // error message if the user has no session or the recipe is in a different kitchen.
 async function checkRecipeOwnership(recipeId: number): Promise<string | null> {
-  const kitchenIds = await getKitchenIds();
+  const kitchenIds = await getAllKitchenIds();
   if (kitchenIds.length === 0) return "Not signed in.";
 
   const found = await prisma.recipe.findFirst({

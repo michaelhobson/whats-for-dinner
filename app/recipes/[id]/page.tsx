@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { parseRecipe, difficultyStyle, ingredientQty, ParsedRecipe } from "@/lib/recipe-utils";
-import { getKitchenIds } from "@/lib/kitchen";
+import { getAllKitchenIds } from "@/lib/kitchen";
 import { markCooked } from "@/app/actions/recipes";
 import { DeleteRecipeButton } from "@/components/DeleteRecipeButton";
 import { RatingWidget } from "@/components/RatingWidget";
@@ -10,7 +10,7 @@ import { NotesEditor } from "@/components/NotesEditor";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const kitchenIds = await getKitchenIds();
+  const kitchenIds = await getAllKitchenIds();
   const raw = kitchenIds.length
     ? await prisma.recipe.findFirst({
         where: { id: Number(id), kitchenId: { in: kitchenIds } },
@@ -27,7 +27,7 @@ export default async function RecipeDetailPage({
 }) {
   const { id } = await params;
   const numId = Number(id);
-  const kitchenIds = await getKitchenIds();
+  const kitchenIds = await getAllKitchenIds();
 
   const [raw, cookLogs] = await Promise.all([
     kitchenIds.length

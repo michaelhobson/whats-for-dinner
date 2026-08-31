@@ -1,13 +1,13 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { parseRecipe } from "@/lib/recipe-utils";
-import { getKitchenIds } from "@/lib/kitchen";
+import { getAllKitchenIds } from "@/lib/kitchen";
 import { updateRecipe } from "@/app/actions/recipes";
 import AddRecipeForm from "@/app/recipes/new/AddRecipeForm";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const kitchenIds = await getKitchenIds();
+  const kitchenIds = await getAllKitchenIds();
   const raw = kitchenIds.length
     ? await prisma.recipe.findFirst({
         where: { id: Number(id), kitchenId: { in: kitchenIds } },
@@ -23,7 +23,7 @@ export default async function EditRecipePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const kitchenIds = await getKitchenIds();
+  const kitchenIds = await getAllKitchenIds();
   const raw = kitchenIds.length
     ? await prisma.recipe.findFirst({ where: { id: Number(id), kitchenId: { in: kitchenIds } } })
     : null;
