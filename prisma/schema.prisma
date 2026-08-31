@@ -21,6 +21,12 @@ model User {
   accounts    Account[]
   sessions    Session[]
   memberships KitchenMembership[]
+
+  // The kitchen this user lands on after login. Nullable so no migration is
+  // needed for existing users; falls back to oldest membership in getKitchenId().
+  defaultKitchenId Int?
+  defaultKitchen   Kitchen?        @relation("UserDefaultKitchen", fields: [defaultKitchenId], references: [id], onDelete: SetNull)
+  sentInvites      KitchenInvite[]
 }
 
 model Account {
@@ -70,16 +76,16 @@ enum KitchenRole {
   DINER        // read-only
 }
 
-// A Kitchen is the unit that owns recipes. MVP: every user has exactly one
-// personal Kitchen (sole member, RESTAURATEUR). Multi-member households are
-// supported by the data model even though the UI doesn't expose switching yet.
+// A Kitchen is the unit that owns recipes.
 model Kitchen {
   id        Int      @id @default(autoincrement())
   name      String
   createdAt DateTime @default(now())
 
-  recipes     Recipe[]
-  memberships KitchenMembership[]
+  recipes          Recipe[]
+  memberships      KitchenMembership[]
+  defaultForUsers  User[]              @relation("UserDefaultKitchen")
+  invites          KitchenInvite[]
 }
 
 // Join table linking Users to Kitchens with a role.
@@ -92,6 +98,28 @@ model KitchenMembership {
   kitchen Kitchen @relation(fields: [kitchenId], references: [id], onDelete: Cascade)
 
   @@id([userId, kitchenId])
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+model KitchenInvite {
+  id              Int          @id @default(autoincrement())
+  kitchenId       Int
+  invitedEmail    String
+  role            KitchenRole
+  token           String       @unique
+  status          InviteStatus @default(PENDING)
+  invitedByUserId String
+  createdAt       DateTime     @default(now())
+  expiresAt       DateTime
+
+  kitchen   Kitchen @relation(fields: [kitchenId], references: [id], onDelete: Cascade)
+  invitedBy User    @relation(fields: [invitedByUserId], references: [id], onDelete: Cascade)
 }
 
 // ── App models ─────────────────────────────────────────────────────────────────

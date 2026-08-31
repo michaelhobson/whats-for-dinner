@@ -10,6 +10,6 @@ export const config = {
   // routes themselves (/login, /api/auth). Those must stay public so users
   // can reach the sign-in page and Auth.js can handle callbacks.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|login|api/auth).*)",
+    "/((?!_next/static|_next/image|favicon.ico|login|api/auth|invite).*)",
   ],
 };

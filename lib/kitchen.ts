@@ -15,17 +15,31 @@ export async function getKitchenIds(): Promise<number[]> {
   return memberships.map((m) => m.kitchenId);
 }
 
-// Returns the "primary" kitchenId for the current user (oldest membership).
+// Returns the "primary" kitchenId for the current user.
+// Prefers their defaultKitchenId (if set and still valid), falls back to oldest membership.
 // Used when we need to assign a recipe to exactly one kitchen (create/import).
 export async function getKitchenId(): Promise<number | null> {
   const session = await auth();
-  if (!session?.user?.id) return null;
+  const userId = session?.user?.id;
+  if (!userId) return null;
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { defaultKitchenId: true },
+  });
+
+  if (user?.defaultKitchenId) {
+    const valid = await prisma.kitchenMembership.findFirst({
+      where: { userId, kitchenId: user.defaultKitchenId },
+      select: { kitchenId: true },
+    });
+    if (valid) return valid.kitchenId;
+  }
 
   const membership = await prisma.kitchenMembership.findFirst({
-    where: { userId: session.user.id },
+    where: { userId },
     orderBy: { kitchen: { createdAt: "asc" } },
     select: { kitchenId: true },
   });
-
   return membership?.kitchenId ?? null;
 }
