@@ -12,6 +12,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   session: { strategy: "jwt" },
   providers: [
     Resend({
+      // Pass apiKey explicitly — Auth.js auto-population reads AUTH_RESEND_KEY,
+      // but we use the conventional RESEND_API_KEY name in our env config.
+      apiKey: process.env.RESEND_API_KEY,
       from: process.env.RESEND_FROM ?? "noreply@example.com",
     }),
   ],
