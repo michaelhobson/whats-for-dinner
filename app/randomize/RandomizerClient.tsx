@@ -95,9 +95,14 @@ function applyFilters(recipes: ParsedRecipe[], f: Filters): ParsedRecipe[] {
   return recipes.filter(
     (r) =>
       matchArr(r.mealType, f.mealType) &&
-      cuisineMatchesFilter(r.cuisine, f.cuisine) &&
+      // Recipes with no cuisine tags pass regardless (they aren't tagged to any style,
+      // so they should never be excluded by the cuisine filter).
+      (r.cuisine.length === 0 || cuisineMatchesFilter(r.cuisine, f.cuisine)) &&
+      // Recipes without a dishCategory always pass — the filter narrows by category,
+      // it doesn't require one. Uncategorized recipes are eligible for any selection.
       (f.dishCategory.length === 0 ||
-        (r.dishCategory != null && f.dishCategory.includes(r.dishCategory))) &&
+        r.dishCategory == null ||
+        f.dishCategory.includes(r.dishCategory)) &&
       matchArr(r.flavorNotes, f.flavorNotes) &&
       matchSeason(r.season, f.season) &&
       matchArr([r.difficulty], f.difficulty) &&
@@ -195,6 +200,32 @@ export default function RandomizerClient({ recipes }: { recipes: ParsedRecipe[] 
   }, [filters]);
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
+
+  // When the recipe list changes (e.g. a recipe was added in another tab and
+  // the server re-rendered), automatically include any new cuisine styles and
+  // dish categories so freshly-added recipes aren't silently excluded.
+  useEffect(() => {
+    setFilters((prev) => {
+      const newStyles = [
+        ...new Set(recipes.flatMap((r) => r.cuisine.map((p) => p.style))),
+      ].filter((s) => !prev.cuisine.includes(s));
+
+      const newCats = [
+        ...new Set(
+          recipes
+            .map((r) => r.dishCategory)
+            .filter((c): c is string => c != null)
+        ),
+      ].filter((c) => !prev.dishCategory.includes(c));
+
+      if (newStyles.length === 0 && newCats.length === 0) return prev;
+      return {
+        ...prev,
+        cuisine: [...prev.cuisine, ...newStyles],
+        dishCategory: [...prev.dishCategory, ...newCats],
+      };
+    });
+  }, [recipes]);
 
   // ── Roll ───────────────────────────────────────────────────────────────────
 

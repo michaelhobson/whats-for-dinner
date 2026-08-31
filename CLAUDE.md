@@ -110,7 +110,7 @@ All members of a kitchen, regardless of role, can view all recipes and use the r
 - [x] Phase 2.3 — Import (URL, photo, multi-photo, structured ingredient parsing)
 - [x] Phase 2.4a — Accounts: auth + Kitchen data model + migration of existing recipes
 - [x] Phase 2.4b — Accounts: scope all reads/writes to the current user's kitchen
-- [ ] Phase 2.4c — Kitchen invites and permission-level enforcement (Restaurateur/Chef/Diner)
+- [x] Phase 2.4c — Kitchen invites and permission-level enforcement (Restaurateur/Chef/Diner)
 - [ ] Phase 2.5 — Share features
 - [ ] Phase 2.6 — Planning tools (full week mode, shopping list)
 - [ ] Phase 2.7 — Dinner party mode
