@@ -42,9 +42,9 @@ Standard Next.js App Router conventions apply.
 /types
   next-auth.d.ts    — extends Session to include user.id
 
-auth.config.ts      — Edge-compatible Auth.js config (no Prisma); imported by middleware
+auth.config.ts      — Edge-compatible Auth.js config (no Prisma); imported by proxy
 auth.ts             — full Auth.js config: Prisma adapter, Resend, JWT sessions
-middleware.ts       — session-based route protection (all routes except /login, /api/auth)
+proxy.ts            — session-based route protection (all routes except /login, /api/auth); renamed from middleware.ts per Next.js 16 convention
 prisma.config.ts    — Prisma 7 config: schema path, DATABASE_URL (not inside /prisma/)
 ```
 
