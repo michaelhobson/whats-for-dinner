@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ParsedRecipe, difficultyStyle } from "@/lib/recipe-utils";
-import { CUISINE_REGIONS, CuisinePairing, cuisineMatchesFilter } from "@/lib/cuisine";
+import { CUISINE_REGIONS, CuisinePairing } from "@/lib/cuisine";
 import RecipeCard from "@/components/RecipeCard";
 
 // ── Option constants (mirrored from the add-recipe form) ──────────────────────
@@ -79,11 +79,39 @@ function computeDefaultFilters(recipes: ParsedRecipe[]): Filters {
 // ── Pure helpers ──────────────────────────────────────────────────────────────
 
 function applyFilters(recipes: ParsedRecipe[], f: Filters): ParsedRecipe[] {
-  const matchArr = (vals: string[], filter: string[]) =>
-    filter.length === 0 || filter.some((v) => vals.includes(v));
+  // Compute the universe of dynamic filter options from the current recipe set.
+  // These counts let us distinguish "all options selected" from "subset selected."
+  const allCuisineStyleCount = new Set(
+    recipes.flatMap((r) => r.cuisine.map((p) => p.style))
+  ).size;
+  const allDishCategoryCount = new Set(
+    recipes.map((r) => r.dishCategory).filter((c): c is string => c != null)
+  ).size;
 
-  const matchSeason = (vals: string[], filter: string[]) =>
-    filter.length === 0 || vals.includes("any") || filter.some((v) => vals.includes(v));
+  // A filter is unconstrained when it's empty OR every possible option is selected.
+  // In both cases all recipes pass, including those with no value in that category.
+  // When a strict subset is selected, only recipes whose value overlaps with the
+  // selection pass; recipes with no value (null/empty) are excluded.
+  const unconstrained = (filter: string[], totalOptions: number) =>
+    filter.length === 0 || filter.length >= totalOptions;
+
+  const matchArr = (vals: string[], filter: string[], totalOptions: number) =>
+    unconstrained(filter, totalOptions) || filter.some((v) => vals.includes(v));
+
+  const matchSeason = (vals: string[], filter: string[]) => {
+    if (unconstrained(filter, SEASONS.length)) return true;
+    return vals.includes("any") || filter.some((v) => vals.includes(v));
+  };
+
+  const matchCuisine = (cuisines: CuisinePairing[], filter: string[]) => {
+    if (unconstrained(filter, allCuisineStyleCount)) return true;
+    return cuisines.some((p) => filter.includes(p.style));
+  };
+
+  const matchDishCategory = (category: string | null, filter: string[]) => {
+    if (unconstrained(filter, allDishCategoryCount)) return true;
+    return category != null && filter.includes(category);
+  };
 
   const matchText = (val: string | null, q: string) =>
     !q.trim() || (val?.toLowerCase().includes(q.toLowerCase()) ?? false);
@@ -94,19 +122,13 @@ function applyFilters(recipes: ParsedRecipe[], f: Filters): ParsedRecipe[] {
 
   return recipes.filter(
     (r) =>
-      matchArr(r.mealType, f.mealType) &&
-      // Recipes with no cuisine tags pass regardless (they aren't tagged to any style,
-      // so they should never be excluded by the cuisine filter).
-      (r.cuisine.length === 0 || cuisineMatchesFilter(r.cuisine, f.cuisine)) &&
-      // Recipes without a dishCategory always pass — the filter narrows by category,
-      // it doesn't require one. Uncategorized recipes are eligible for any selection.
-      (f.dishCategory.length === 0 ||
-        r.dishCategory == null ||
-        f.dishCategory.includes(r.dishCategory)) &&
-      matchArr(r.flavorNotes, f.flavorNotes) &&
+      matchArr(r.mealType, f.mealType, MEAL_TYPES.length) &&
+      matchCuisine(r.cuisine, f.cuisine) &&
+      matchDishCategory(r.dishCategory, f.dishCategory) &&
+      matchArr(r.flavorNotes, f.flavorNotes, FLAVOR_NOTES.length) &&
       matchSeason(r.season, f.season) &&
-      matchArr([r.difficulty], f.difficulty) &&
-      matchArr(r.cookingMethod, f.cookingMethod) &&
+      matchArr([r.difficulty], f.difficulty, DIFFICULTIES.length) &&
+      matchArr(r.cookingMethod, f.cookingMethod, COOKING_METHODS.length) &&
       matchRating(r.rating, f.rating) &&
       matchText(r.mainProtein, f.protein) &&
       matchText(r.mainStarch, f.starch) &&
