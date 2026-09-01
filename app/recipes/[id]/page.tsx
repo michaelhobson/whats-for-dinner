@@ -55,7 +55,7 @@ export default async function RecipeDetailPage({
             href="/recipes"
             className="inline-flex items-center gap-1.5 text-sm font-medium text-orange-700 hover:text-orange-900 transition-colors"
           >
-            ← All Recipes
+            ← Cookbook
           </Link>
           <div className="flex items-center gap-2">
             <Link

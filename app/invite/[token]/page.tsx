@@ -135,7 +135,7 @@ export default async function InvitePage({
           href="/recipes"
           className="inline-block rounded-xl bg-orange-600 hover:bg-orange-700 text-white font-semibold px-6 py-2.5 transition-colors"
         >
-          Browse Recipes →
+          Go to Cookbook →
         </Link>
       </div>
     </main>

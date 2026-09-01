@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { useRouter } from "next/navigation";
 import { RecipeFormState } from "@/app/actions/recipes";
 import { CUISINE_REGIONS, regionToStyles, CuisinePairing } from "@/lib/cuisine";
 import { DISH_CATEGORIES } from "@/lib/dish-categories";
@@ -56,10 +57,21 @@ export default function AddRecipeForm({
   serverAction: FormAction;
   initialData?: ParsedRecipe;
 }) {
+  const router = useRouter();
   const [state, formAction, isPending] = useActionState(serverAction, null);
 
   // id > 0 means editing an existing saved recipe; id === 0 means pre-filled from import (still a create)
   const isEdit = (initialData?.id ?? 0) > 0;
+  const cancelHref = isEdit ? `/recipes/${initialData!.id}` : null;
+
+  // Track whether the user has changed anything since the page loaded
+  const [isDirty, setIsDirty] = useState(false);
+  const markDirty = () => { if (!isDirty) setIsDirty(true); };
+
+  const handleCancel = () => {
+    if (isDirty && !window.confirm("Discard changes?")) return;
+    router.push(cancelHref!);
+  };
 
   const [name, setName] = useState(initialData?.name ?? "");
   const [nameError, setNameError] = useState("");
@@ -95,6 +107,14 @@ export default function AddRecipeForm({
     setIngredients((prev) =>
       prev.map((ing, idx) => (idx === i ? { ...ing, [field]: val } : ing))
     );
+  const moveIngredient = (i: number, delta: -1 | 1) =>
+    setIngredients((prev) => {
+      const next = [...prev];
+      const j = i + delta;
+      if (j < 0 || j >= next.length) return prev;
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
 
   // ── Directions helpers ────────────────────────────────────────────────────
   const addDirection = () =>
@@ -171,12 +191,32 @@ export default function AddRecipeForm({
   );
 
   return (
-    <form action={formAction} onSubmit={handleSubmit} className="space-y-5">
+    <form action={formAction} onSubmit={handleSubmit} onChange={markDirty} className="space-y-5">
       {/* Hidden id for edit mode */}
       {isEdit && <input type="hidden" name="id" value={initialData!.id} />}
       {/* Hidden sourceUrl — set when recipe was imported from a URL */}
       {initialData?.sourceUrl && (
         <input type="hidden" name="sourceUrl" value={initialData.sourceUrl} />
+      )}
+
+      {/* Top Cancel / Save bar — edit mode only */}
+      {isEdit && cancelHref && (
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
+          >
+            ← Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={isPending}
+            className="rounded-xl bg-orange-600 px-6 py-2 text-sm font-semibold text-white shadow-sm hover:bg-orange-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {isPending ? "Saving…" : "Save Changes"}
+          </button>
+        </div>
       )}
 
       {state?.error && (
@@ -248,6 +288,26 @@ export default function AddRecipeForm({
                 onChange={(e) => updateIngredient(i, "name", e.target.value)}
                 className={`${inputCls} flex-1 min-w-0`}
               />
+              <div className="flex flex-col gap-0.5 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => moveIngredient(i, -1)}
+                  disabled={i === 0}
+                  aria-label="Move ingredient up"
+                  className="w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-20 disabled:cursor-not-allowed transition-colors text-xs"
+                >
+                  ▲
+                </button>
+                <button
+                  type="button"
+                  onClick={() => moveIngredient(i, 1)}
+                  disabled={i === ingredients.length - 1}
+                  aria-label="Move ingredient down"
+                  className="w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-20 disabled:cursor-not-allowed transition-colors text-xs"
+                >
+                  ▼
+                </button>
+              </div>
               {ingredients.length > 1 && (
                 <button
                   type="button"
@@ -563,7 +623,18 @@ export default function AddRecipeForm({
       </FormSection>
 
       {/* ── Submit ── */}
-      <div className="flex justify-end pt-2 pb-6">
+      <div className="flex items-center justify-between pt-2 pb-6">
+        {isEdit && cancelHref ? (
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
+          >
+            ← Cancel
+          </button>
+        ) : (
+          <div />
+        )}
         <button
           type="submit"
           disabled={isPending}

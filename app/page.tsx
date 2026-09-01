@@ -29,7 +29,7 @@ export default function Home() {
               href="/recipes"
               className="flex-1 rounded-xl border-2 border-orange-600 px-5 py-3 text-sm font-semibold text-orange-700 transition-colors hover:bg-orange-100 text-center"
             >
-              Browse Recipes
+              Cookbook
             </Link>
             <Link
               href="/recipes/new"

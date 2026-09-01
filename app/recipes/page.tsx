@@ -4,7 +4,7 @@ import { parseRecipe } from "@/lib/recipe-utils";
 import { getKitchenIds } from "@/lib/kitchen";
 import RecipeCard from "@/components/RecipeCard";
 
-export const metadata = { title: "Browse Recipes — What's For Dinner?" };
+export const metadata = { title: "Cookbook — What's For Dinner?" };
 
 export default async function RecipesPage() {
   const kitchenIds = await getKitchenIds();
@@ -24,7 +24,7 @@ export default async function RecipesPage() {
         {/* Page header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">All Recipes</h1>
+            <h1 className="text-3xl font-bold text-gray-900">Cookbook</h1>
             <p className="text-gray-500 mt-1 text-sm">
               {recipes.length === 0
                 ? "No recipes yet"

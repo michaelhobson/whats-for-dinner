@@ -213,8 +213,8 @@ export function ImportAndCreateForm() {
   // ── Render ──
   return (
     <div className="space-y-6">
-      {/* Import options — side-by-side on wider screens, stacked on mobile */}
-      <div className="grid gap-4 sm:grid-cols-2 items-start">
+      {/* Import options — equal-height side-by-side on wider screens, stacked on mobile */}
+      <div className="grid gap-4 sm:grid-cols-2">
 
         {/* URL import */}
         <div className="bg-white rounded-2xl border border-orange-100 shadow-sm overflow-hidden">
