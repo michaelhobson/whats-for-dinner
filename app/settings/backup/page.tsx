@@ -5,6 +5,7 @@ export const metadata = { title: "Backup & Restore — What's For Dinner?" };
 
 export default function BackupPage() {
   return (
+    <div className="flex-1 bg-orange-50">
     <main className="max-w-xl mx-auto px-4 py-8 space-y-8">
       <div className="flex items-center gap-3 mb-2">
         <Link href="/settings" className="text-sm text-orange-600 hover:text-orange-800 transition-colors">
@@ -40,5 +41,6 @@ export default function BackupPage() {
         <ImportButton />
       </section>
     </main>
+    </div>
   );
 }

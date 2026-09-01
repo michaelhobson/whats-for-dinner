@@ -94,12 +94,12 @@ export function InviteSection({
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSendInvite()}
-            className="flex-1 min-w-[180px] rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+            className="flex-1 min-w-[180px] rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-900 placeholder-gray-400 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
           />
           <select
             value={role}
             onChange={(e) => setRole(e.target.value as "RESTAURATEUR" | "CHEF" | "DINER")}
-            className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+            className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-400"
           >
             <option value="RESTAURATEUR">Restaurateur</option>
             <option value="CHEF">Chef</option>
