@@ -1,95 +1,75 @@
 import Link from "next/link";
-import { auth, signOut } from "@/auth";
+import { auth } from "@/auth";
 import { getActiveKitchenId, getUserKitchens } from "@/lib/kitchen";
 import { KitchenSwitcher } from "./KitchenSwitcher";
+import { OverflowMenu } from "./OverflowMenu";
 
 export default async function NavBar() {
   const session = await auth();
 
-  // Fetch kitchen data for logged-in users — both calls share the cached session
+  // For logged-out users the proxy handles the redirect; just render the logo.
   const [kitchens, activeKitchenId] = session?.user?.id
     ? await Promise.all([getUserKitchens(), getActiveKitchenId()])
     : [[], null];
 
   return (
     <header className="sticky top-0 z-10 bg-white border-b border-orange-100 shadow-sm">
-      <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
+      {/*
+        Two-section flex layout:
+          Left  (min-w-0, can shrink) — logo + kitchen switcher
+          Right (shrink-0, fixed)     — Add, Randomize, overflow menu
+        The kitchen switcher truncates when viewport is narrow rather than
+        pushing the action buttons off-screen.
+      */}
+      <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
 
-        {/* Left: logo + kitchen switcher */}
-        <div className="flex items-center gap-3 min-w-0">
+        {/* ── Left: logo + kitchen switcher ── */}
+        <div className="flex items-center gap-2 min-w-0">
           <Link
             href="/"
-            className="flex items-center gap-2 font-bold text-orange-800 text-lg hover:text-orange-600 transition-colors shrink-0"
+            className="flex items-center gap-1.5 font-bold text-orange-800 text-lg hover:text-orange-600 transition-colors shrink-0"
           >
             <span>🍽️</span>
-            <span className="hidden lg:inline">What&apos;s For Dinner?</span>
+            <span className="hidden sm:inline">What&apos;s For Dinner?</span>
           </Link>
 
           {kitchens.length > 0 && (
             <>
               <div className="w-px h-5 bg-orange-200 shrink-0" aria-hidden />
-              <div className="min-w-0">
+              {/*
+                Width cap grows with viewport so the switcher truncates gracefully
+                on narrow phones instead of squishing the action buttons.
+              */}
+              <div className="min-w-0 max-w-[80px] sm:max-w-[160px]">
                 <KitchenSwitcher kitchens={kitchens} activeKitchenId={activeKitchenId} />
               </div>
             </>
           )}
         </div>
 
-        {/* Right: nav actions — only shown when signed in */}
+        {/* ── Right: action buttons (never squished) ── */}
         {session && (
-          <nav className="flex items-center gap-3 shrink-0">
-            <Link
-              href="/randomize"
-              className="text-sm font-medium text-orange-700 hover:text-orange-900 transition-colors hidden sm:inline"
-            >
-              🎲 Randomize
-            </Link>
-            <Link
-              href="/recipes"
-              className="text-sm font-medium text-orange-700 hover:text-orange-900 transition-colors hidden sm:inline"
-            >
-              Browse
-            </Link>
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Add Recipe — secondary / outlined */}
             <Link
               href="/recipes/new"
-              className="text-sm font-semibold bg-orange-600 text-white px-3.5 py-1.5 rounded-lg hover:bg-orange-700 transition-colors"
+              className="rounded-lg border border-orange-300 px-3 py-1.5 text-sm font-semibold text-orange-700 hover:bg-orange-50 hover:border-orange-400 transition-colors"
             >
               + Add
             </Link>
 
-            {/* Settings icon */}
+            {/* Randomize — primary / filled, most prominent */}
             <Link
-              href="/settings"
-              className="flex items-center gap-1 text-sm text-orange-500 hover:text-orange-700 transition-colors px-2 py-1 rounded-md hover:bg-orange-50"
-              title="Settings"
+              href="/randomize"
+              className="rounded-lg bg-orange-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-orange-700 transition-colors"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-                <path fillRule="evenodd" d="M7.84 1.804A1 1 0 0 1 8.82 1h2.36a1 1 0 0 1 .98.804l.331 1.652a6.993 6.993 0 0 1 1.929 1.115l1.598-.54a1 1 0 0 1 1.186.447l1.18 2.044a1 1 0 0 1-.205 1.251l-1.267 1.113a7.047 7.047 0 0 1 0 2.228l1.267 1.113a1 1 0 0 1 .205 1.251l-1.18 2.044a1 1 0 0 1-1.186.447l-1.598-.54a6.993 6.993 0 0 1-1.929 1.115l-.33 1.652a1 1 0 0 1-.98.804H8.82a1 1 0 0 1-.98-.804l-.331-1.652a6.993 6.993 0 0 1-1.929-1.115l-1.598.54a1 1 0 0 1-1.186-.447l-1.18-2.044a1 1 0 0 1 .205-1.251l1.267-1.113a7.047 7.047 0 0 1 0-2.228L1.821 7.773a1 1 0 0 1-.205-1.251l1.18-2.044a1 1 0 0 1 1.186-.447l1.598.54A6.993 6.993 0 0 1 7.51 3.456l.33-1.652ZM10 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" clipRule="evenodd" />
-              </svg>
-              <span className="hidden md:inline text-xs font-medium">Settings</span>
+              🎲 Randomize
             </Link>
 
-            {/* Divider before sign-out */}
-            <div className="w-px h-5 bg-orange-200" aria-hidden />
-
-            {/* Sign-out */}
-            <form
-              action={async () => {
-                "use server";
-                await signOut({ redirectTo: "/login" });
-              }}
-            >
-              <button
-                type="submit"
-                title={`Sign out (${session.user?.email ?? ""})`}
-                className="text-sm font-medium text-gray-500 hover:text-gray-800 transition-colors px-2 py-1 rounded-md hover:bg-gray-100"
-              >
-                Sign out
-              </button>
-            </form>
-          </nav>
+            {/* Overflow menu (Browse, Settings, Sign Out) */}
+            <OverflowMenu userEmail={session.user?.email ?? undefined} />
+          </div>
         )}
-
       </div>
     </header>
   );

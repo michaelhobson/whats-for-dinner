@@ -19,19 +19,20 @@ export function KitchenSwitcher({
 
   if (!activeKitchen) return null;
 
-  // Single kitchen — show name as a static label, no switcher needed
+  // Single kitchen — static label, no interaction needed.
+  // max-w-full + truncate so the parent div's width cap is respected.
   if (kitchens.length === 1) {
     return (
-      <span className="flex items-center gap-1 text-sm font-medium text-orange-800 bg-orange-50 px-2.5 py-1 rounded-lg select-none">
-        <span className="text-base leading-none">🏠</span>
-        <span className="truncate max-w-[140px]">{activeKitchen.name}</span>
+      <span className="flex items-center gap-1 text-sm font-medium text-orange-800 bg-orange-50 px-2.5 py-1 rounded-lg select-none max-w-full overflow-hidden">
+        <span className="text-base leading-none shrink-0">🏠</span>
+        <span className="truncate">{activeKitchen.name}</span>
       </span>
     );
   }
 
-  // Multiple kitchens — styled select that triggers a server action + refresh
+  // Multiple kitchens — styled select; w-full so parent div controls the width.
   return (
-    <div className="relative flex items-center">
+    <div className="relative flex items-center w-full">
       <span className="pointer-events-none absolute left-2.5 text-base leading-none z-10">🏠</span>
       <select
         value={activeKitchenId ?? activeKitchen.id}
@@ -46,9 +47,9 @@ export function KitchenSwitcher({
         }}
         className={`
           appearance-none text-sm font-medium text-orange-800 bg-orange-50
-          hover:bg-orange-100 pl-8 pr-6 py-1 rounded-lg cursor-pointer
+          hover:bg-orange-100 pl-8 pr-5 py-1 rounded-lg cursor-pointer
           border border-orange-200 focus:outline-none focus:ring-2 focus:ring-orange-400
-          transition-colors max-w-[180px] truncate
+          transition-colors w-full truncate
           ${isPending ? "opacity-50 cursor-wait" : ""}
         `}
       >
@@ -58,8 +59,7 @@ export function KitchenSwitcher({
           </option>
         ))}
       </select>
-      {/* Dropdown chevron */}
-      <span className="pointer-events-none absolute right-2 text-orange-500 text-[10px] leading-none">
+      <span className="pointer-events-none absolute right-1.5 text-orange-500 text-[10px] leading-none">
         ▾
       </span>
     </div>
