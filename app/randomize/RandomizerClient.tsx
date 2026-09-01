@@ -2,144 +2,23 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ParsedRecipe, difficultyStyle } from "@/lib/recipe-utils";
-import { CUISINE_REGIONS, CuisinePairing } from "@/lib/cuisine";
-import { DISH_CATEGORIES } from "@/lib/dish-categories";
+import { CuisinePairing } from "@/lib/cuisine";
 import RecipeCard from "@/components/RecipeCard";
+import { FilterPanel } from "@/components/FilterPanel";
+import {
+  Filters,
+  computeDefaultFilters,
+  applyFilters,
+  computeNarrowedCount,
+} from "@/lib/recipe-filters";
 
-// ── Option constants (mirrored from the add-recipe form) ──────────────────────
+// ── Spin timing ───────────────────────────────────────────────────────────────
 
-// Flattened list of every cuisine style across all regions (used as fixed total for filter logic)
-const ALL_CUISINE_STYLES = CUISINE_REGIONS.flatMap((r) => r.styles);
-
-const MEAL_TYPES   = ["breakfast", "lunch", "dinner", "dessert", "snack"] as const;
-const FLAVOR_NOTES = ["rich", "sweet", "bright", "cheesy", "creamy", "spicy", "umami", "tangy", "smoky", "herby", "nutty", "garlicky"] as const;
-const SEASONS      = ["spring", "summer", "fall", "winter", "any"] as const;
-const DIFFICULTIES = ["easy", "medium", "hard"] as const;
-
-// Rating options — intentionally using "none" for unrated recipes
-const RATING_OPTIONS = [
-  { value: "up",   label: "👍 Liked" },
-  { value: "none", label: "⬜ Not yet rated" },
-  { value: "down", label: "👎 Not a hit" },
-] as const;
-// Default: thumbs-up and unrated included; thumbs-down excluded
-const RATING_DEFAULT = ["up", "none"];
-const COOKING_METHODS = [
-  { value: "oven",        label: "Oven" },
-  { value: "stovetop",    label: "Stovetop" },
-  { value: "instant-pot", label: "Instant Pot" },
-  { value: "slow-cooker", label: "Slow Cooker" },
-  { value: "grill",       label: "Grill" },
-  { value: "no-cook",     label: "No Cook" },
-  { value: "air-fryer",   label: "Air Fryer" },
-] as const;
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-type Filters = {
-  mealType: string[];
-  cuisine: string[];      // selected style strings; empty = no constraint = match all
-  dishCategory: string[];
-  flavorNotes: string[];
-  season: string[];
-  difficulty: string[];
-  cookingMethod: string[];
-  // Rating uses exact-match logic: empty = no recipes match (intentional, unlike other filters)
-  rating: string[];
-  protein: string;
-  starch: string;
-  vegetable: string;
-};
-
-// Spin timing
 const SPIN_FRAMES_MS = [60, 65, 70, 75, 85, 100, 120, 145, 175, 215, 265, 325, 400, 300];
 const LOCK_GROUPS = ["name", "components", "tags", "stats"] as const;
 type LockGroup = (typeof LOCK_GROUPS)[number];
 const LOCK_INTERVAL_MS = 220;
 const REVEAL_DELAY_MS  = 350;
-
-// ── Filter initialisation ────────────────────────────────────────────────────
-
-// Rating intentionally defaults to a partial selection (up + none) per product spec.
-function computeDefaultFilters(): Filters {
-  return {
-    mealType:      [...MEAL_TYPES],
-    cuisine:       [...ALL_CUISINE_STYLES],
-    dishCategory:  [...DISH_CATEGORIES],
-    flavorNotes:   [...FLAVOR_NOTES],
-    season:        [...SEASONS],
-    difficulty:    [...DIFFICULTIES],
-    cookingMethod: COOKING_METHODS.map((m) => m.value),
-    rating:        [...RATING_DEFAULT],
-    protein:       "",
-    starch:        "",
-    vegetable:     "",
-  };
-}
-
-// ── Pure helpers ──────────────────────────────────────────────────────────────
-
-function applyFilters(recipes: ParsedRecipe[], f: Filters): ParsedRecipe[] {
-  // A filter is unconstrained when it's empty OR every possible option is selected.
-  // In both cases all recipes pass, including those with no value in that category.
-  // When a strict subset is selected, only recipes whose value overlaps pass;
-  // recipes with no value (null/empty) are excluded.
-  const unconstrained = (filter: string[], totalOptions: number) =>
-    filter.length === 0 || filter.length >= totalOptions;
-
-  const matchArr = (vals: string[], filter: string[], totalOptions: number) =>
-    unconstrained(filter, totalOptions) || filter.some((v) => vals.includes(v));
-
-  const matchSeason = (vals: string[], filter: string[]) => {
-    if (unconstrained(filter, SEASONS.length)) return true;
-    return vals.includes("any") || filter.some((v) => vals.includes(v));
-  };
-
-  const matchCuisine = (cuisines: CuisinePairing[], filter: string[]) => {
-    if (unconstrained(filter, ALL_CUISINE_STYLES.length)) return true;
-    return cuisines.some((p) => filter.includes(p.style));
-  };
-
-  const matchDishCategory = (category: string | null, filter: string[]) => {
-    if (unconstrained(filter, DISH_CATEGORIES.length)) return true;
-    return category != null && filter.includes(category);
-  };
-
-  const matchText = (val: string | null, q: string) =>
-    !q.trim() || (val?.toLowerCase().includes(q.toLowerCase()) ?? false);
-
-  // Rating uses exact-match only; empty filter means no recipes pass (intentional).
-  const matchRating = (rating: string | null, filter: string[]) =>
-    filter.includes(rating ?? "none");
-
-  return recipes.filter(
-    (r) =>
-      matchArr(r.mealType, f.mealType, MEAL_TYPES.length) &&
-      matchCuisine(r.cuisine, f.cuisine) &&
-      matchDishCategory(r.dishCategory, f.dishCategory) &&
-      matchArr(r.flavorNotes, f.flavorNotes, FLAVOR_NOTES.length) &&
-      matchSeason(r.season, f.season) &&
-      matchArr([r.difficulty], f.difficulty, DIFFICULTIES.length) &&
-      matchArr(r.cookingMethod, f.cookingMethod, COOKING_METHODS.length) &&
-      matchRating(r.rating, f.rating) &&
-      matchText(r.mainProtein, f.protein) &&
-      matchText(r.mainStarch, f.starch) &&
-      matchText(r.mainVegetable, f.vegetable)
-  );
-}
-
-function pickRandom<T>(pool: T[], n: number): T[] {
-  const copy = [...pool];
-  for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy.slice(0, Math.min(n, copy.length));
-}
-
-function randomFrom<T>(pool: T[]): T {
-  return pool[Math.floor(Math.random() * pool.length)];
-}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -147,10 +26,6 @@ export default function RandomizerClient({ recipes }: { recipes: ParsedRecipe[] 
   const [filters, setFilters] = useState<Filters>(() => computeDefaultFilters());
   const [count, setCount] = useState<1 | 2 | 3>(1);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  // Which top-level filter categories are expanded in the accordion
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
-  // Which cuisine regions are expanded within the cuisine accordion
-  const [expandedRegions, setExpandedRegions] = useState<Set<string>>(new Set());
 
   const [drawn, setDrawn] = useState<ParsedRecipe[]>([]);
   const [rollKey, setRollKey] = useState(0);
@@ -164,51 +39,11 @@ export default function RandomizerClient({ recipes }: { recipes: ParsedRecipe[] 
 
   // ── Derived data ───────────────────────────────────────────────────────────
 
-  // Per-option recipe counts for all filter categories (drives the "(N)" labels and grey-out)
-  const counts = useMemo(() => {
-    const mealType     = new Map<string, number>();
-    const cuisine      = new Map<string, number>();
-    const dishCategory = new Map<string, number>();
-    const flavorNotes  = new Map<string, number>();
-    const season       = new Map<string, number>();
-    const difficulty   = new Map<string, number>();
-    const cookingMethod = new Map<string, number>();
-    const rating       = new Map<string, number>();
-    for (const r of recipes) {
-      r.mealType.forEach((v) => mealType.set(v, (mealType.get(v) ?? 0) + 1));
-      r.cuisine.forEach((p) => cuisine.set(p.style, (cuisine.get(p.style) ?? 0) + 1));
-      if (r.dishCategory) dishCategory.set(r.dishCategory, (dishCategory.get(r.dishCategory) ?? 0) + 1);
-      r.flavorNotes.forEach((v) => flavorNotes.set(v, (flavorNotes.get(v) ?? 0) + 1));
-      r.season.forEach((v) => season.set(v, (season.get(v) ?? 0) + 1));
-      if (r.difficulty) difficulty.set(r.difficulty, (difficulty.get(r.difficulty) ?? 0) + 1);
-      r.cookingMethod.forEach((v) => cookingMethod.set(v, (cookingMethod.get(v) ?? 0) + 1));
-      const rv = r.rating ?? "none";
-      rating.set(rv, (rating.get(rv) ?? 0) + 1);
-    }
-    return { mealType, cuisine, dishCategory, flavorNotes, season, difficulty, cookingMethod, rating };
-  }, [recipes]);
-
   const filteredPool = useMemo(() => applyFilters(recipes, filters), [recipes, filters]);
 
-  // Count narrowed categories: anything not at its fully-selected default
-  const narrowedCount = useMemo(() => {
-    let n = 0;
-    if (filters.mealType.length > 0 && filters.mealType.length < MEAL_TYPES.length) n++;
-    if (filters.flavorNotes.length > 0 && filters.flavorNotes.length < FLAVOR_NOTES.length) n++;
-    if (filters.season.length > 0 && filters.season.length < SEASONS.length) n++;
-    if (filters.difficulty.length > 0 && filters.difficulty.length < DIFFICULTIES.length) n++;
-    if (filters.cookingMethod.length > 0 && filters.cookingMethod.length < COOKING_METHODS.length) n++;
-    if (filters.cuisine.length > 0 && filters.cuisine.length < ALL_CUISINE_STYLES.length) n++;
-    if (filters.dishCategory.length > 0 && filters.dishCategory.length < DISH_CATEGORIES.length) n++;
-    // Rating is narrowed whenever not all 3 options are selected (default is already partial)
-    if (filters.rating.length < RATING_OPTIONS.length) n++;
-    if (filters.protein.trim()) n++;
-    if (filters.starch.trim()) n++;
-    if (filters.vegetable.trim()) n++;
-    return n;
-  }, [filters]);
+  const narrowedCount = useMemo(() => computeNarrowedCount(filters), [filters]);
 
-  // Fields pinned (single-value filter) — used by SpinnerCard
+  // Fields pinned (single-value filter) — used by SpinnerCard to suppress cycling
   const fixedFields = useMemo((): Set<string> => {
     const s = new Set<string>();
     if (filters.mealType.length === 1) s.add("mealType");
@@ -221,7 +56,6 @@ export default function RandomizerClient({ recipes }: { recipes: ParsedRecipe[] 
   }, [filters]);
 
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
-
 
   // ── Roll ───────────────────────────────────────────────────────────────────
 
@@ -240,7 +74,6 @@ export default function RandomizerClient({ recipes }: { recipes: ParsedRecipe[] 
     setAnimating(true);
     setLockedGroups(new Set());
 
-    // All cards start simultaneously; field-level stagger is handled inside SpinnerCard.
     const spinElapsed = SPIN_FRAMES_MS.reduce((a, b) => a + b, 0);
 
     LOCK_GROUPS.forEach((group, i) => {
@@ -260,63 +93,7 @@ export default function RandomizerClient({ recipes }: { recipes: ParsedRecipe[] 
     );
   }, [animating, filteredPool, count, rollKey]);
 
-  // ── Filter helpers ─────────────────────────────────────────────────────────
-
-  const resetFilters = () => setFilters(computeDefaultFilters());
-
-  const setArr = (key: keyof Omit<Filters, "protein" | "starch" | "vegetable">, val: string[]) =>
-    setFilters((prev) => ({ ...prev, [key]: val }));
-
-  const toggleItem = (key: keyof Omit<Filters, "protein" | "starch" | "vegetable">, val: string) =>
-    setFilters((prev) => {
-      const cur = prev[key] as string[];
-      return { ...prev, [key]: cur.includes(val) ? cur.filter((v) => v !== val) : [...cur, val] };
-    });
-
-  const setTxt = (key: "protein" | "starch" | "vegetable", val: string) =>
-    setFilters((prev) => ({ ...prev, [key]: val }));
-
-  // Cuisine region helpers — use CUISINE_REGIONS as the source of truth (not recipe-derived index)
-  const getRegionStyles = (region: string): string[] =>
-    [...(CUISINE_REGIONS.find((r) => r.region === region)?.styles ?? [])];
-
-  const isRegionAllSelected = (region: string) => {
-    const styles = getRegionStyles(region);
-    return styles.length > 0 && styles.every((s) => filters.cuisine.includes(s));
-  };
-  const isRegionAnySelected = (region: string) =>
-    getRegionStyles(region).some((s) => filters.cuisine.includes(s));
-
-  const toggleRegionCuisine = (region: string) => {
-    const styles = getRegionStyles(region);
-    const allSelected = styles.every((s) => filters.cuisine.includes(s));
-    setFilters((prev) => ({
-      ...prev,
-      cuisine: allSelected
-        ? prev.cuisine.filter((s) => !styles.includes(s))
-        : [...new Set([...prev.cuisine, ...styles])],
-    }));
-  };
-  const toggleStyleCuisine = (style: string) => toggleItem("cuisine", style);
-
-  const toggleCategory = (cat: string) =>
-    setExpandedCategories((prev) => {
-      const next = new Set(prev);
-      if (next.has(cat)) next.delete(cat);
-      else next.add(cat);
-      return next;
-    });
-
-  const toggleRegionExpanded = (region: string) =>
-    setExpandedRegions((prev) => {
-      const next = new Set(prev);
-      if (next.has(region)) next.delete(region);
-      else next.add(region);
-      return next;
-    });
-
   // Grid layout tracks `count`, not drawn.length, so slots appear immediately
-  // when the user picks a number — before clicking roll.
   const cardsWidthCls = count === 3 ? "max-w-5xl" : "max-w-3xl";
   const cardsGridCls =
     count === 3
@@ -376,7 +153,7 @@ export default function RandomizerClient({ recipes }: { recipes: ParsedRecipe[] 
                 )}
               </button>
               <button
-                onClick={resetFilters}
+                onClick={() => setFilters(computeDefaultFilters())}
                 className="text-xs text-gray-400 hover:text-orange-600 transition-colors"
               >
                 Reset filters
@@ -384,216 +161,12 @@ export default function RandomizerClient({ recipes }: { recipes: ParsedRecipe[] 
             </div>
 
             {filtersOpen && (
-              <div className="mt-4 pt-4 border-t border-gray-100 space-y-2">
-
-                {/* Meal Type */}
-                <CategoryFilter
-                  label="Meal Type"
-                  allOptions={[...MEAL_TYPES]}
-                  selected={filters.mealType}
-                  onSelectAll={() => setArr("mealType", [...MEAL_TYPES])}
-                  onClear={() => setArr("mealType", [])}
-                  expanded={expandedCategories.has("Meal Type")}
-                  onToggle={() => toggleCategory("Meal Type")}
-                >
-                  <CheckboxList
-                    options={[...MEAL_TYPES]}
-                    selected={filters.mealType}
-                    onToggle={(v) => toggleItem("mealType", v)}
-                    counts={counts.mealType}
-                  />
-                </CategoryFilter>
-
-                {/* Cuisine — top-level accordion wrapping region sub-accordions */}
-                <CategoryFilter
-                  label="Cuisine"
-                  allOptions={ALL_CUISINE_STYLES}
-                  selected={filters.cuisine}
-                  onSelectAll={() => setArr("cuisine", [...ALL_CUISINE_STYLES])}
-                  onClear={() => setArr("cuisine", [])}
-                  expanded={expandedCategories.has("Cuisine")}
-                  onToggle={() => toggleCategory("Cuisine")}
-                >
-                  <div className="space-y-1">
-                    {CUISINE_REGIONS.map(({ region, styles }) => {
-                      const allSel = isRegionAllSelected(region);
-                      const anySel = isRegionAnySelected(region);
-                      const selCount = styles.filter((s) => filters.cuisine.includes(s)).length;
-                      const isExpanded = expandedRegions.has(region);
-                      return (
-                        <div key={region} className="rounded-lg border border-gray-100 overflow-hidden">
-                          {/* Region header */}
-                          <div className="flex items-center gap-2 px-3 py-2 bg-gray-50/60">
-                            <IndeterminateCheckbox
-                              checked={allSel}
-                              indeterminate={anySel && !allSel}
-                              onChange={() => toggleRegionCuisine(region)}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => toggleRegionExpanded(region)}
-                              className="flex-1 flex items-center justify-between text-left"
-                            >
-                              <span className="text-sm font-medium text-gray-700">{region}</span>
-                              <div className="flex items-center gap-2">
-                                <span className={`text-xs ${!allSel && anySel ? "text-orange-500 font-semibold" : "text-gray-400"}`}>
-                                  {allSel ? "All" : `${selCount} of ${styles.length}`}
-                                </span>
-                                <span className={`text-[10px] text-gray-400 transition-transform duration-150 ${isExpanded ? "rotate-90" : ""}`}>▶</span>
-                              </div>
-                            </button>
-                          </div>
-                          {/* Style checkboxes */}
-                          {isExpanded && (
-                            <div className="px-4 pt-2 pb-3 border-t border-gray-100 flex flex-wrap gap-x-4 gap-y-2">
-                              {styles.map((style) => {
-                                const styleCount = counts.cuisine.get(style) ?? 0;
-                                const zero = styleCount === 0;
-                                return (
-                                  <label
-                                    key={style}
-                                    className={`flex items-center gap-1.5 text-sm cursor-pointer ${zero ? "text-gray-300" : "text-gray-700 hover:text-gray-900"}`}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={filters.cuisine.includes(style)}
-                                      onChange={() => toggleStyleCuisine(style)}
-                                      className="w-4 h-4 rounded border-gray-300 accent-orange-600 cursor-pointer"
-                                    />
-                                    <span>{style}</span>
-                                    <span className={`text-xs ${zero ? "text-gray-300" : "text-gray-400"}`}>({styleCount})</span>
-                                  </label>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </CategoryFilter>
-
-                {/* Season */}
-                <CategoryFilter
-                  label="Season"
-                  allOptions={[...SEASONS]}
-                  selected={filters.season}
-                  onSelectAll={() => setArr("season", [...SEASONS])}
-                  onClear={() => setArr("season", [])}
-                  expanded={expandedCategories.has("Season")}
-                  onToggle={() => toggleCategory("Season")}
-                >
-                  <CheckboxList
-                    options={[...SEASONS]}
-                    selected={filters.season}
-                    onToggle={(v) => toggleItem("season", v)}
-                    counts={counts.season}
-                  />
-                </CategoryFilter>
-
-                {/* Difficulty */}
-                <CategoryFilter
-                  label="Difficulty"
-                  allOptions={[...DIFFICULTIES]}
-                  selected={filters.difficulty}
-                  onSelectAll={() => setArr("difficulty", [...DIFFICULTIES])}
-                  onClear={() => setArr("difficulty", [])}
-                  expanded={expandedCategories.has("Difficulty")}
-                  onToggle={() => toggleCategory("Difficulty")}
-                >
-                  <CheckboxList
-                    options={[...DIFFICULTIES]}
-                    selected={filters.difficulty}
-                    onToggle={(v) => toggleItem("difficulty", v)}
-                    counts={counts.difficulty}
-                  />
-                </CategoryFilter>
-
-                {/* Cooking Method */}
-                <CategoryFilter
-                  label="Cooking Method"
-                  allOptions={COOKING_METHODS.map((m) => m.value)}
-                  selected={filters.cookingMethod}
-                  onSelectAll={() => setArr("cookingMethod", COOKING_METHODS.map((m) => m.value))}
-                  onClear={() => setArr("cookingMethod", [])}
-                  expanded={expandedCategories.has("Cooking Method")}
-                  onToggle={() => toggleCategory("Cooking Method")}
-                >
-                  <CheckboxList
-                    options={COOKING_METHODS.map((m) => m.value)}
-                    labels={COOKING_METHODS.map((m) => m.label)}
-                    selected={filters.cookingMethod}
-                    onToggle={(v) => toggleItem("cookingMethod", v)}
-                    counts={counts.cookingMethod}
-                  />
-                </CategoryFilter>
-
-                {/* Flavor Notes */}
-                <CategoryFilter
-                  label="Flavor Notes"
-                  allOptions={[...FLAVOR_NOTES]}
-                  selected={filters.flavorNotes}
-                  onSelectAll={() => setArr("flavorNotes", [...FLAVOR_NOTES])}
-                  onClear={() => setArr("flavorNotes", [])}
-                  expanded={expandedCategories.has("Flavor Notes")}
-                  onToggle={() => toggleCategory("Flavor Notes")}
-                >
-                  <CheckboxList
-                    options={[...FLAVOR_NOTES]}
-                    selected={filters.flavorNotes}
-                    onToggle={(v) => toggleItem("flavorNotes", v)}
-                    counts={counts.flavorNotes}
-                  />
-                </CategoryFilter>
-
-                {/* Dish Category */}
-                <CategoryFilter
-                  label="Dish Category"
-                  allOptions={[...DISH_CATEGORIES]}
-                  selected={filters.dishCategory}
-                  onSelectAll={() => setArr("dishCategory", [...DISH_CATEGORIES])}
-                  onClear={() => setArr("dishCategory", [])}
-                  expanded={expandedCategories.has("Dish Category")}
-                  onToggle={() => toggleCategory("Dish Category")}
-                >
-                  <CheckboxList
-                    options={[...DISH_CATEGORIES]}
-                    selected={filters.dishCategory}
-                    onToggle={(v) => toggleItem("dishCategory", v)}
-                    counts={counts.dishCategory}
-                  />
-                </CategoryFilter>
-
-                {/* Rating — defaults to partial (up + none); empty ≠ all for this filter */}
-                <CategoryFilter
-                  label="Rating"
-                  allOptions={RATING_OPTIONS.map((r) => r.value)}
-                  selected={filters.rating}
-                  onSelectAll={() => setArr("rating", RATING_OPTIONS.map((r) => r.value))}
-                  onClear={() => setArr("rating", [])}
-                  expanded={expandedCategories.has("Rating")}
-                  onToggle={() => toggleCategory("Rating")}
-                >
-                  <CheckboxList
-                    options={RATING_OPTIONS.map((r) => r.value)}
-                    labels={RATING_OPTIONS.map((r) => r.label)}
-                    selected={filters.rating}
-                    onToggle={(v) => toggleItem("rating", v)}
-                    counts={counts.rating}
-                  />
-                </CategoryFilter>
-
-                {/* Component text filters — free-text, not accordion */}
-                <div className="rounded-lg border border-gray-100 overflow-hidden">
-                  <div className="px-3 py-2 bg-gray-50/60">
-                    <p className="text-sm font-medium text-gray-700">Ingredient / Component</p>
-                  </div>
-                  <div className="px-3 pt-2 pb-3 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <TextFilter label="Protein contains"  value={filters.protein}   onChange={(v) => setTxt("protein", v)}   placeholder="e.g. chicken" />
-                    <TextFilter label="Starch contains"   value={filters.starch}    onChange={(v) => setTxt("starch", v)}    placeholder="e.g. pasta" />
-                    <TextFilter label="Veg contains"      value={filters.vegetable} onChange={(v) => setTxt("vegetable", v)} placeholder="e.g. spinach" />
-                  </div>
-                </div>
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <FilterPanel
+                  recipes={recipes}
+                  filters={filters}
+                  onFiltersChange={setFilters}
+                />
               </div>
             )}
           </div>
@@ -621,7 +194,7 @@ export default function RandomizerClient({ recipes }: { recipes: ParsedRecipe[] 
         </div>
       </div>
 
-      {/* Cards area — always shows `count` slots so the layout doesn't jump on roll */}
+      {/* Cards area */}
       <div className={`mx-auto px-4 pb-12 ${cardsWidthCls}`}>
         {isSpinning ? (
           <section>
@@ -673,6 +246,21 @@ export default function RandomizerClient({ recipes }: { recipes: ParsedRecipe[] 
   );
 }
 
+// ── Pure helpers ──────────────────────────────────────────────────────────────
+
+function pickRandom<T>(pool: T[], n: number): T[] {
+  const copy = [...pool];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy.slice(0, Math.min(n, copy.length));
+}
+
+function randomFrom<T>(pool: T[]): T {
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 // ── PlaceholderCard ────────────────────────────────────────────────────────────
 
 function PlaceholderCard() {
@@ -686,14 +274,11 @@ function PlaceholderCard() {
 
 // ── SpinnerCard ────────────────────────────────────────────────────────────────
 
-// The 7 fields shown on a spinner card, each cycling independently.
 const FIELD_KEYS = ["mealType", "name", "components", "cuisine", "flavorNotes", "prepTime", "difficulty"] as const;
 type FieldKey = (typeof FIELD_KEYS)[number];
 
 type FieldState = { display: ParsedRecipe; frame: number };
 
-// Assigns each field a randomly-shuffled slot in a 0–360ms window so they
-// feel like independent slot-machine reels rather than perfectly in sync.
 function makeFieldDelays(): Record<FieldKey, number> {
   const slots = [0, 60, 120, 180, 240, 300, 360];
   const shuffled = [...slots].sort(() => Math.random() - 0.5);
@@ -716,8 +301,6 @@ function SpinnerCard({ finalRecipe, filteredPool, fixedFields, lockedGroups, rol
   const cardTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   useEffect(() => {
-    // Each field gets its own timer chain, offset by a random delay so they
-    // cycle independently — like separate reels in a slot machine.
     const delays = makeFieldDelays();
 
     FIELD_KEYS.forEach((fieldKey) => {
@@ -823,154 +406,5 @@ function SpinnerCard({ finalRecipe, filteredPool, fixedFields, lockedGroups, rol
         </div>
       </div>
     </article>
-  );
-}
-
-// ── Sub-components ─────────────────────────────────────────────────────────────
-
-// Checkbox that can be in an indeterminate state (partial region selection)
-function IndeterminateCheckbox({
-  checked,
-  indeterminate,
-  onChange,
-}: {
-  checked: boolean;
-  indeterminate: boolean;
-  onChange: () => void;
-}) {
-  const ref = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (ref.current) ref.current.indeterminate = indeterminate;
-  }, [indeterminate]);
-  return (
-    <input
-      ref={ref}
-      type="checkbox"
-      checked={checked}
-      onChange={onChange}
-      className="w-4 h-4 rounded border-gray-300 accent-orange-600 cursor-pointer flex-shrink-0"
-    />
-  );
-}
-
-// Collapsible accordion for a filter category with Select All / Clear controls
-function CategoryFilter({
-  label,
-  allOptions,
-  selected,
-  onSelectAll,
-  onClear,
-  expanded,
-  onToggle,
-  children,
-}: {
-  label: string;
-  allOptions: string[];
-  selected: string[];
-  onSelectAll: () => void;
-  onClear: () => void;
-  expanded: boolean;
-  onToggle: () => void;
-  children: React.ReactNode;
-}) {
-  const selCount = selected.length;
-  const total    = allOptions.length;
-  const summary  = selCount === 0 ? "None" : selCount >= total ? "All" : `${selCount} of ${total}`;
-  const isNone   = selCount === 0;
-
-  return (
-    <div className="rounded-lg border border-gray-100 overflow-hidden">
-      <div className="flex items-center px-3 py-2 bg-gray-50/60">
-        <button
-          type="button"
-          onClick={onToggle}
-          className="flex-1 flex items-center justify-between text-left"
-        >
-          <span className="text-sm font-medium text-gray-700">{label}</span>
-          <div className="flex items-center gap-2">
-            <span className={`text-xs ${isNone ? "text-red-400 font-semibold" : "text-gray-400"}`}>{summary}</span>
-            <span className={`text-[10px] text-gray-400 transition-transform duration-150 ${expanded ? "rotate-90" : ""}`}>▶</span>
-          </div>
-        </button>
-      </div>
-      {expanded && (
-        <div className="px-3 pt-2 pb-3 border-t border-gray-100">
-          <div className="flex justify-end gap-3 mb-2">
-            <button
-              onClick={onSelectAll}
-              disabled={selCount >= total}
-              className="text-xs text-gray-400 hover:text-orange-600 transition-colors disabled:opacity-30"
-            >
-              All
-            </button>
-            <button
-              onClick={onClear}
-              disabled={selCount === 0}
-              className="text-xs text-gray-400 hover:text-red-500 transition-colors disabled:opacity-30"
-            >
-              Clear
-            </button>
-          </div>
-          {children}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function CheckboxList({
-  options,
-  labels,
-  selected,
-  onToggle,
-  counts,
-}: {
-  options: string[];
-  labels?: string[];
-  selected: string[];
-  onToggle: (v: string) => void;
-  counts?: Map<string, number>;
-}) {
-  return (
-    <div className="flex flex-wrap gap-x-4 gap-y-2">
-      {options.map((val, i) => {
-        const count = counts?.get(val) ?? 0;
-        const zero  = counts !== undefined && count === 0;
-        return (
-          <label
-            key={val}
-            className={`flex items-center gap-1.5 text-sm cursor-pointer ${zero ? "text-gray-300" : "text-gray-700 hover:text-gray-900"}`}
-          >
-            <input
-              type="checkbox"
-              checked={selected.includes(val)}
-              onChange={() => onToggle(val)}
-              className="w-4 h-4 rounded border-gray-300 accent-orange-600 cursor-pointer"
-            />
-            <span className="capitalize">{labels?.[i] ?? val}</span>
-            {counts !== undefined && (
-              <span className={`text-xs ${zero ? "text-gray-300" : "text-gray-400"}`}>({count})</span>
-            )}
-          </label>
-        );
-      })}
-    </div>
-  );
-}
-
-function TextFilter({ label, value, onChange, placeholder }: {
-  label: string; value: string; onChange: (v: string) => void; placeholder?: string;
-}) {
-  return (
-    <div>
-      <label className="block text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">{label}</label>
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition"
-      />
-    </div>
   );
 }
