@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { RecipeFormState } from "@/app/actions/recipes";
 import { CUISINE_REGIONS, regionToStyles, CuisinePairing } from "@/lib/cuisine";
+import { DISH_CATEGORIES } from "@/lib/dish-categories";
 import { ParsedRecipe } from "@/lib/recipe-utils";
 
 // ── Option constants ──────────────────────────────────────────────────────────
@@ -342,14 +343,19 @@ export default function AddRecipeForm({
             <label className={labelCls} htmlFor="dishCategory">
               Dish Category
             </label>
-            <input
+            <select
               id="dishCategory"
               name="dishCategory"
-              type="text"
-              defaultValue={initialData?.dishCategory ?? undefined}
-              placeholder="e.g. pasta, soup, stir-fry, grain bowl, salad"
+              defaultValue={initialData?.dishCategory ?? ""}
               className={inputCls}
-            />
+            >
+              <option value="">— None selected —</option>
+              {DISH_CATEGORIES.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* ── Cuisine picker ── */}
