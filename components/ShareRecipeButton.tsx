@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { generateShareLink, revokeShareLink } from "@/app/actions/share";
+import { ShareImageButton } from "@/components/ShareImageButton";
+import { ParsedRecipe } from "@/lib/recipe-utils";
 
 // Icon-button + popover, same interaction pattern as OverflowMenu/KitchenSwitcher:
 // a relatively-positioned trigger with an absolutely-positioned panel, closed on
@@ -9,10 +11,12 @@ import { generateShareLink, revokeShareLink } from "@/app/actions/share";
 // popover's own contents vary with share-link state.
 export function ShareRecipeButton({
   recipeId,
+  recipe,
   initialToken,
   canManage,
 }: {
   recipeId: number;
+  recipe: ParsedRecipe;
   initialToken: string | null;
   canManage: boolean;
 }) {
@@ -139,6 +143,7 @@ export function ShareRecipeButton({
                   </button>
                 )}
               </div>
+              <ShareImageButton recipe={recipe} shareUrl={shareUrl} />
             </div>
           )}
 

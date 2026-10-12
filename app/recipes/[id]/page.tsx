@@ -92,7 +92,7 @@ export default async function RecipeDetailPage({
                   <DeleteRecipeButton id={numId} name={recipe.name} />
                 </>
               )}
-              <ShareRecipeButton recipeId={numId} initialToken={activeShareToken} canManage={canEdit} />
+              <ShareRecipeButton recipeId={numId} recipe={recipe} initialToken={activeShareToken} canManage={canEdit} />
             </div>
           )}
         </div>
