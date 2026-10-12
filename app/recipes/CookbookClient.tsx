@@ -12,7 +12,13 @@ import {
   computeNarrowedCount,
 } from "@/lib/recipe-filters";
 
-export default function CookbookClient({ recipes }: { recipes: ParsedRecipe[] }) {
+export default function CookbookClient({
+  recipes,
+  canAddRecipe,
+}: {
+  recipes: ParsedRecipe[];
+  canAddRecipe: boolean;
+}) {
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Filters>(() => computeDefaultFilters());
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -39,13 +45,17 @@ export default function CookbookClient({ recipes }: { recipes: ParsedRecipe[] })
       <div className="flex flex-col items-center justify-center py-24 text-center text-gray-400">
         <span className="text-6xl mb-4">🍳</span>
         <p className="text-xl font-medium text-gray-500 mb-1">No recipes yet</p>
-        <p className="text-sm mb-6">Add your first one to get started.</p>
-        <Link
-          href="/recipes/new"
-          className="rounded-xl bg-orange-600 px-6 py-3 text-sm font-semibold text-white hover:bg-orange-700 transition-colors"
-        >
-          Add a Recipe
-        </Link>
+        {canAddRecipe && (
+          <>
+            <p className="text-sm mb-6">Add your first one to get started.</p>
+            <Link
+              href="/recipes/new"
+              className="rounded-xl bg-orange-600 px-6 py-3 text-sm font-semibold text-white hover:bg-orange-700 transition-colors"
+            >
+              Add a Recipe
+            </Link>
+          </>
+        )}
       </div>
     );
   }

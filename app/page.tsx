@@ -1,6 +1,12 @@
 import Link from "next/link";
+import { getActiveKitchenId, getKitchenRole } from "@/lib/kitchen";
+import { canEditRecipes } from "@/lib/permissions";
 
-export default function Home() {
+export default async function Home() {
+  const activeKitchenId = await getActiveKitchenId();
+  const role = activeKitchenId ? await getKitchenRole(activeKitchenId) : null;
+  const canAddRecipe = canEditRecipes(role);
+
   return (
     <div className="flex flex-1 flex-col items-center justify-center bg-orange-50 px-4">
       <main className="flex flex-col items-center gap-10 text-center">
@@ -31,12 +37,14 @@ export default function Home() {
             >
               Cookbook
             </Link>
-            <Link
-              href="/recipes/new"
-              className="flex-1 rounded-xl border-2 border-orange-600 px-5 py-3 text-sm font-semibold text-orange-700 transition-colors hover:bg-orange-100 text-center"
-            >
-              Add a Recipe
-            </Link>
+            {canAddRecipe && (
+              <Link
+                href="/recipes/new"
+                className="flex-1 rounded-xl border-2 border-orange-600 px-5 py-3 text-sm font-semibold text-orange-700 transition-colors hover:bg-orange-100 text-center"
+              >
+                Add a Recipe
+              </Link>
+            )}
           </div>
         </div>
       </main>

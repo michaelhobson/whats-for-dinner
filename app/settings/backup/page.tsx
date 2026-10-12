@@ -1,9 +1,15 @@
 import Link from "next/link";
 import { ImportButton } from "@/components/ImportButton";
+import { getActiveKitchenId, getKitchenRole } from "@/lib/kitchen";
+import { canEditRecipes } from "@/lib/permissions";
 
 export const metadata = { title: "Backup & Restore — What's For Dinner?" };
 
-export default function BackupPage() {
+export default async function BackupPage() {
+  const activeKitchenId = await getActiveKitchenId();
+  const role = activeKitchenId ? await getKitchenRole(activeKitchenId) : null;
+  const canImport = canEditRecipes(role);
+
   return (
     <div className="flex-1 bg-orange-50">
     <main className="max-w-xl mx-auto px-4 py-8 space-y-8">
@@ -30,16 +36,18 @@ export default function BackupPage() {
         </a>
       </section>
 
-      {/* Restore */}
-      <section className="bg-white rounded-2xl shadow-sm border border-orange-100 p-6 space-y-3">
-        <h2 className="text-lg font-semibold text-gray-800">Restore</h2>
-        <p className="text-sm text-gray-500">
-          Import a backup file to restore recipes. Existing recipes are never
-          overwritten — only recipes whose names aren&apos;t already in the
-          database will be added.
-        </p>
-        <ImportButton />
-      </section>
+      {/* Restore — Diners are read-only on recipe content, so this is hidden for them */}
+      {canImport && (
+        <section className="bg-white rounded-2xl shadow-sm border border-orange-100 p-6 space-y-3">
+          <h2 className="text-lg font-semibold text-gray-800">Restore</h2>
+          <p className="text-sm text-gray-500">
+            Import a backup file to restore recipes. Existing recipes are never
+            overwritten — only recipes whose names aren&apos;t already in the
+            database will be added.
+          </p>
+          <ImportButton />
+        </section>
+      )}
     </main>
     </div>
   );

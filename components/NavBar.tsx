@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { auth } from "@/auth";
-import { getActiveKitchenId, getUserKitchens } from "@/lib/kitchen";
+import { getActiveKitchenId, getUserKitchens, getKitchenRole } from "@/lib/kitchen";
+import { canEditRecipes } from "@/lib/permissions";
 import { KitchenSwitcher } from "./KitchenSwitcher";
 import { OverflowMenu } from "./OverflowMenu";
 
@@ -11,6 +12,11 @@ export default async function NavBar() {
   const [kitchens, activeKitchenId] = session?.user?.id
     ? await Promise.all([getUserKitchens(), getActiveKitchenId()])
     : [[], null];
+
+  // "+ Add" creates in the active kitchen, so gate it on that kitchen's role —
+  // Diners are read-only on recipe content.
+  const activeRole = activeKitchenId ? await getKitchenRole(activeKitchenId) : null;
+  const canAddRecipe = canEditRecipes(activeRole);
 
   return (
     <header className="sticky top-0 z-10 bg-white border-b border-orange-100 shadow-sm">
@@ -50,13 +56,15 @@ export default async function NavBar() {
         {/* ── Right: action buttons (never squished) ── */}
         {session && (
           <div className="flex items-center gap-2 shrink-0">
-            {/* Add Recipe — secondary / outlined */}
-            <Link
-              href="/recipes/new"
-              className="rounded-lg border border-orange-300 px-3 py-1.5 text-sm font-semibold text-orange-700 hover:bg-orange-50 hover:border-orange-400 transition-colors"
-            >
-              + Add
-            </Link>
+            {/* Add Recipe — secondary / outlined; hidden for Diners (read-only) */}
+            {canAddRecipe && (
+              <Link
+                href="/recipes/new"
+                className="rounded-lg border border-orange-300 px-3 py-1.5 text-sm font-semibold text-orange-700 hover:bg-orange-50 hover:border-orange-400 transition-colors"
+              >
+                + Add
+              </Link>
+            )}
 
             {/* Randomize — primary / filled, most prominent */}
             <Link

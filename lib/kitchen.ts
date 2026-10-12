@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import type { KitchenRole } from "@/app/generated/prisma/client";
 
 const ACTIVE_KITCHEN_COOKIE = "active_kitchen_id";
 
@@ -93,4 +94,26 @@ export async function getUserKitchens(): Promise<{ id: number; name: string }[]>
     orderBy: { kitchen: { createdAt: "asc" } },
   });
   return memberships.map((m) => ({ id: m.kitchen.id, name: m.kitchen.name }));
+}
+
+// ── Role lookup ────────────────────────────────────────────────────────────────
+
+// The current user's role in a SPECIFIC kitchen — never a global per-user role.
+// Returns null if signed out or not a member of that kitchen.
+export async function getKitchenRole(kitchenId: number): Promise<KitchenRole | null> {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) return null;
+
+  const membership = await prisma.kitchenMembership.findFirst({
+    where: { userId, kitchenId },
+    select: { role: true },
+  });
+  return membership?.role ?? null;
+}
+
+// Number of RESTAURATEUR members in a kitchen — used to enforce the
+// at-least-one-Restaurateur invariant before a demotion/removal/departure.
+export async function getRestaurateurCount(kitchenId: number): Promise<number> {
+  return prisma.kitchenMembership.count({ where: { kitchenId, role: "RESTAURATEUR" } });
 }

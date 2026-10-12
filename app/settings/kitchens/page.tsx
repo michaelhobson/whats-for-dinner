@@ -17,7 +17,14 @@ export default async function KitchensPage() {
       include: {
         kitchen: {
           include: {
-            memberships: { select: { userId: true, role: true } },
+            memberships: {
+              select: {
+                userId: true,
+                role: true,
+                user: { select: { email: true, name: true } },
+              },
+              orderBy: { userId: "asc" },
+            },
             invites: {
               where: { status: "PENDING" },
               orderBy: { createdAt: "desc" },
@@ -66,6 +73,13 @@ export default async function KitchensPage() {
               memberCount={kitchen.memberships.length}
               isDefault={kitchen.id === user?.defaultKitchenId}
               isRestaurateur={role === "RESTAURATEUR"}
+              currentUserId={userId}
+              members={kitchen.memberships.map((m) => ({
+                userId: m.userId,
+                role: m.role as string,
+                email: m.user.email,
+                name: m.user.name,
+              }))}
               pendingInvites={kitchen.invites.map((inv) => ({
                 ...inv,
                 role: inv.role as string,

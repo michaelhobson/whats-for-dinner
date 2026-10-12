@@ -1,7 +1,8 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { parseRecipe } from "@/lib/recipe-utils";
-import { getAllKitchenIds } from "@/lib/kitchen";
+import { getAllKitchenIds, getKitchenRole } from "@/lib/kitchen";
+import { canEditRecipes } from "@/lib/permissions";
 import { updateRecipe } from "@/app/actions/recipes";
 import AddRecipeForm from "@/app/recipes/new/AddRecipeForm";
 
@@ -28,6 +29,11 @@ export default async function EditRecipePage({
     ? await prisma.recipe.findFirst({ where: { id: Number(id), kitchenId: { in: kitchenIds } } })
     : null;
   if (!raw) notFound();
+
+  // Defense-in-depth for a direct URL hit — the Edit link is already hidden
+  // for Diners, but the server action also rejects the save either way.
+  const role = raw.kitchenId != null ? await getKitchenRole(raw.kitchenId) : null;
+  if (!canEditRecipes(role)) redirect(`/recipes/${id}`);
 
   const recipe = parseRecipe(raw as Parameters<typeof parseRecipe>[0]);
 

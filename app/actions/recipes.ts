@@ -3,7 +3,10 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getKitchenId, getAllKitchenIds } from "@/lib/kitchen";
+import { getKitchenId, getAllKitchenIds, getKitchenRole } from "@/lib/kitchen";
+import { canEditRecipes } from "@/lib/permissions";
+
+const RECIPE_PERMISSION_ERROR = "Diners can't add, edit, or delete recipes — ask a Chef or Restaurateur.";
 
 export type RecipeFormState = { error: string } | null;
 
@@ -42,6 +45,8 @@ function parseFormData(formData: FormData) {
 
 // Returns null if the recipe belongs to one of the user's kitchens, or an
 // error message if the user has no session or the recipe is in a different kitchen.
+// Used by actions open to all roles (rate, notes, cook history) — ownership only,
+// no content-edit permission check.
 async function checkRecipeOwnership(recipeId: number): Promise<string | null> {
   const kitchenIds = await getAllKitchenIds();
   if (kitchenIds.length === 0) return "Not signed in.";
@@ -54,6 +59,26 @@ async function checkRecipeOwnership(recipeId: number): Promise<string | null> {
   return found ? null : "Recipe not found.";
 }
 
+// Used by content-mutating actions (edit/delete) — confirms the recipe belongs
+// to one of the user's kitchens AND that the user's role in THAT specific
+// kitchen (Restaurateur/Chef) allows editing recipes. Diners are rejected here
+// even though checkRecipeOwnership would let them through.
+async function getEditableRecipeKitchenId(recipeId: number): Promise<{ kitchenId: number } | { error: string }> {
+  const kitchenIds = await getAllKitchenIds();
+  if (kitchenIds.length === 0) return { error: "Not signed in." };
+
+  const recipe = await prisma.recipe.findFirst({
+    where: { id: recipeId, kitchenId: { in: kitchenIds } },
+    select: { kitchenId: true },
+  });
+  if (!recipe || recipe.kitchenId == null) return { error: "Recipe not found." };
+
+  const role = await getKitchenRole(recipe.kitchenId);
+  if (!canEditRecipes(role)) return { error: RECIPE_PERMISSION_ERROR };
+
+  return { kitchenId: recipe.kitchenId };
+}
+
 // ── Create ─────────────────────────────────────────────────────────────────────
 
 export async function createRecipe(
@@ -62,6 +87,9 @@ export async function createRecipe(
 ): Promise<RecipeFormState> {
   const kitchenId = await getKitchenId();
   if (!kitchenId) return { error: "No kitchen found — please sign in again." };
+
+  const role = await getKitchenRole(kitchenId);
+  if (!canEditRecipes(role)) return { error: RECIPE_PERMISSION_ERROR };
 
   const { name, raw, multi, prepTime, difficulty, ingredients, directions, cuisine, favorite } =
     parseFormData(formData);
@@ -106,8 +134,8 @@ export async function updateRecipe(
   const id = Number(formData.get("id"));
   if (!id) return { error: "Missing recipe ID." };
 
-  const ownershipError = await checkRecipeOwnership(id);
-  if (ownershipError) return { error: ownershipError };
+  const editable = await getEditableRecipeKitchenId(id);
+  if ("error" in editable) return { error: editable.error };
 
   const { name, raw, multi, prepTime, difficulty, ingredients, directions, cuisine, favorite } =
     parseFormData(formData);
@@ -140,12 +168,16 @@ export async function updateRecipe(
 
 // ── Delete ─────────────────────────────────────────────────────────────────────
 
-export async function deleteRecipe(formData: FormData) {
+export async function deleteRecipe(formData: FormData): Promise<{ error: string } | void> {
   const id = Number(formData.get("id"));
-  const ownershipError = await checkRecipeOwnership(id);
-  if (ownershipError) redirect("/recipes"); // silently bounce — not their recipe
+  if (!id) return { error: "Missing recipe ID." };
+
+  const editable = await getEditableRecipeKitchenId(id);
+  if ("error" in editable) return { error: editable.error };
 
   await prisma.recipe.delete({ where: { id } });
+  revalidatePath("/recipes");
+  revalidatePath("/randomize");
   redirect("/recipes");
 }
 

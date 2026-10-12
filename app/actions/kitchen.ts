@@ -4,7 +4,12 @@ import { headers, cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
+import { getKitchenRole, getRestaurateurCount } from "@/lib/kitchen";
+import { canManageKitchen } from "@/lib/permissions";
 import type { KitchenRole } from "@/app/generated/prisma/client";
+
+const LAST_RESTAURATEUR_ERROR =
+  "A kitchen must always have at least one Restaurateur — promote someone else first.";
 
 const ACTIVE_KITCHEN_COOKIE = "active_kitchen_id";
 
@@ -276,4 +281,100 @@ export async function acceptInvite(
   await prisma.kitchenInvite.update({ where: { id: invite.id }, data: { status: "ACCEPTED" } });
   revalidatePath("/settings");
   return { success: true, kitchenId: invite.kitchenId };
+}
+
+// ── Change a member's role ──────────────────────────────────────────────────────
+
+export async function changeMemberRole(
+  kitchenId: number,
+  memberUserId: string,
+  newRole: KitchenRole,
+): Promise<{ success: true } | { error: string }> {
+  const session = await auth();
+  const callerId = session?.user?.id;
+  if (!callerId) return { error: "Not signed in." };
+
+  const callerRole = await getKitchenRole(kitchenId);
+  if (!canManageKitchen(callerRole)) return { error: "Only Restaurateurs can change member roles." };
+
+  const target = await prisma.kitchenMembership.findFirst({
+    where: { userId: memberUserId, kitchenId },
+  });
+  if (!target) return { error: "That person is not a member of this kitchen." };
+
+  // Guard the last-Restaurateur invariant before demoting anyone away from it.
+  if (target.role === "RESTAURATEUR" && newRole !== "RESTAURATEUR") {
+    const restaurateurCount = await getRestaurateurCount(kitchenId);
+    if (restaurateurCount <= 1) return { error: LAST_RESTAURATEUR_ERROR };
+  }
+
+  await prisma.kitchenMembership.update({
+    where: { userId_kitchenId: { userId: memberUserId, kitchenId } },
+    data: { role: newRole },
+  });
+
+  revalidatePath("/settings/kitchens");
+  return { success: true };
+}
+
+// ── Remove a member ─────────────────────────────────────────────────────────────
+
+export async function removeMember(
+  kitchenId: number,
+  memberUserId: string,
+): Promise<{ success: true } | { error: string }> {
+  const session = await auth();
+  const callerId = session?.user?.id;
+  if (!callerId) return { error: "Not signed in." };
+
+  const callerRole = await getKitchenRole(kitchenId);
+  if (!canManageKitchen(callerRole)) return { error: "Only Restaurateurs can remove members." };
+
+  const target = await prisma.kitchenMembership.findFirst({
+    where: { userId: memberUserId, kitchenId },
+  });
+  if (!target) return { error: "That person is not a member of this kitchen." };
+
+  // Guarded regardless of caller — a non-Restaurateur can never reach this
+  // action anyway, but the invariant is enforced here too, not just in the UI.
+  if (target.role === "RESTAURATEUR") {
+    const restaurateurCount = await getRestaurateurCount(kitchenId);
+    if (restaurateurCount <= 1) return { error: LAST_RESTAURATEUR_ERROR };
+  }
+
+  await prisma.kitchenMembership.delete({
+    where: { userId_kitchenId: { userId: memberUserId, kitchenId } },
+  });
+
+  revalidatePath("/settings/kitchens");
+  return { success: true };
+}
+
+// ── Leave a kitchen (self-service) ──────────────────────────────────────────────
+
+export async function leaveKitchen(
+  kitchenId: number,
+): Promise<{ success: true } | { error: string }> {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) return { error: "Not signed in." };
+
+  const membership = await prisma.kitchenMembership.findFirst({
+    where: { userId, kitchenId },
+  });
+  if (!membership) return { error: "You are not a member of this kitchen." };
+
+  if (membership.role === "RESTAURATEUR") {
+    const restaurateurCount = await getRestaurateurCount(kitchenId);
+    if (restaurateurCount <= 1) {
+      return { error: "You're the only Restaurateur — promote someone else before leaving." };
+    }
+  }
+
+  await prisma.kitchenMembership.delete({
+    where: { userId_kitchenId: { userId, kitchenId } },
+  });
+
+  revalidatePath("/settings/kitchens");
+  return { success: true };
 }

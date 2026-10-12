@@ -2,7 +2,8 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { getKitchenId } from "@/lib/kitchen";
+import { getKitchenId, getKitchenRole } from "@/lib/kitchen";
+import { canEditRecipes } from "@/lib/permissions";
 
 export type ImportResult =
   | { ok: true; added: number; skipped: number }
@@ -16,6 +17,11 @@ export async function importRecipes(
 ): Promise<ImportState> {
   const kitchenId = await getKitchenId();
   if (!kitchenId) return { ok: false, error: "No kitchen found — please sign in again." };
+
+  const role = await getKitchenRole(kitchenId);
+  if (!canEditRecipes(role)) {
+    return { ok: false, error: "Diners can't import recipes — ask a Chef or Restaurateur." };
+  }
 
   const file = formData.get("file") as File | null;
   if (!file || file.size === 0) return { ok: false, error: "No file selected." };

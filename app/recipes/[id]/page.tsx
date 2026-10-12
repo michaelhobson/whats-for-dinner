@@ -2,7 +2,8 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { parseRecipe, difficultyStyle, ingredientQty, ParsedRecipe } from "@/lib/recipe-utils";
-import { getAllKitchenIds } from "@/lib/kitchen";
+import { getAllKitchenIds, getKitchenRole } from "@/lib/kitchen";
+import { canEditRecipes } from "@/lib/permissions";
 import { markCooked } from "@/app/actions/recipes";
 import { DeleteRecipeButton } from "@/components/DeleteRecipeButton";
 import { RatingWidget } from "@/components/RatingWidget";
@@ -43,6 +44,11 @@ export default async function RecipeDetailPage({
   const recipe = parseRecipe(raw as Parameters<typeof parseRecipe>[0]);
   const diff = difficultyStyle[recipe.difficulty];
 
+  // Check the role in THIS recipe's own kitchen — the user may be viewing a
+  // recipe from a kitchen other than their currently-active one.
+  const role = raw.kitchenId != null ? await getKitchenRole(raw.kitchenId) : null;
+  const canEdit = canEditRecipes(role);
+
   const cookCount = cookLogs.length;
   const lastCooked = cookLogs[0]?.cookedAt ?? null;
 
@@ -57,15 +63,17 @@ export default async function RecipeDetailPage({
           >
             ← Cookbook
           </Link>
-          <div className="flex items-center gap-2">
-            <Link
-              href={`/recipes/${numId}/edit`}
-              className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
-            >
-              Edit
-            </Link>
-            <DeleteRecipeButton id={numId} name={recipe.name} />
-          </div>
+          {canEdit && (
+            <div className="flex items-center gap-2">
+              <Link
+                href={`/recipes/${numId}/edit`}
+                className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
+              >
+                Edit
+              </Link>
+              <DeleteRecipeButton id={numId} name={recipe.name} />
+            </div>
+          )}
         </div>
 
         {/* Title + favorite */}
