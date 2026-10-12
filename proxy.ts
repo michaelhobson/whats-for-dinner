@@ -8,8 +8,9 @@ export default NextAuth(authConfig).auth;
 export const config = {
   // Run on all paths EXCEPT Next.js internals, static files, and the auth
   // routes themselves (/login, /api/auth). Those must stay public so users
-  // can reach the sign-in page and Auth.js can handle callbacks.
+  // can reach the sign-in page and Auth.js can handle callbacks. /share is
+  // also public — unlisted recipe share links work without an account.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|login|api/auth|invite).*)",
+    "/((?!_next/static|_next/image|favicon.ico|login|api/auth|invite|share).*)",
   ],
 };

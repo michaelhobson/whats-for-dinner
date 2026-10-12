@@ -176,6 +176,12 @@ model Recipe {
   forkedFrom         Recipe?    @relation("RecipeForks", fields: [forkedFromRecipeId], references: [id])
   forks              Recipe[]   @relation("RecipeForks")
 
+  // Unlisted share link — at most one active link per recipe. A non-null
+  // shareRevokedAt means the token is dead forever; generating a new link
+  // always mints a fresh token rather than reactivating this one.
+  shareToken     String?   @unique
+  shareRevokedAt DateTime?
+
   // Kitchen ownership — nullable to allow a two-step migration (add column,
   // then run prisma/migrate-kitchen.ts to backfill, then make required in a later migration)
   kitchenId Int?
