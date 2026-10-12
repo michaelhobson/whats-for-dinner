@@ -73,7 +73,7 @@ export default async function SharePage({
               <p className="text-sm font-semibold text-gray-700 mb-2">Want this recipe?</p>
               <PullRecipeControl
                 writableKitchens={writableKitchens}
-                onPull={(destinationKitchenId) => pullFromShareLink(token, destinationKitchenId)}
+                onPull={pullFromShareLink.bind(null, token)}
               />
               {writableKitchens.length === 0 && (
                 <p className="text-sm text-gray-500">
