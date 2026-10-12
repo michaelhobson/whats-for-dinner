@@ -9,7 +9,7 @@ import { markCooked } from "@/app/actions/recipes";
 import { DeleteRecipeButton } from "@/components/DeleteRecipeButton";
 import { RatingWidget } from "@/components/RatingWidget";
 import { NotesEditor } from "@/components/NotesEditor";
-import { ShareRecipeSection } from "@/components/ShareRecipeSection";
+import { ShareRecipeButton } from "@/components/ShareRecipeButton";
 import { RecipeHeader, RecipeStatChips, RecipeBody } from "@/components/RecipeDetailView";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
@@ -79,15 +79,20 @@ export default async function RecipeDetailPage({
           >
             ← {backLabel}
           </Link>
-          {canEdit && (
+          {isMember && (
             <div className="flex items-center gap-2">
-              <Link
-                href={`/recipes/${numId}/edit`}
-                className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
-              >
-                Edit
-              </Link>
-              <DeleteRecipeButton id={numId} name={recipe.name} />
+              {canEdit && (
+                <>
+                  <Link
+                    href={`/recipes/${numId}/edit`}
+                    className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-colors"
+                  >
+                    Edit
+                  </Link>
+                  <DeleteRecipeButton id={numId} name={recipe.name} />
+                </>
+              )}
+              <ShareRecipeButton recipeId={numId} initialToken={activeShareToken} canManage={canEdit} />
             </div>
           )}
         </div>
@@ -137,11 +142,6 @@ export default async function RecipeDetailPage({
               </button>
             </form>
           </div>
-        )}
-
-        {/* Share link — any member can view an existing one; only Chef-or-above can manage it */}
-        {isMember && (
-          <ShareRecipeSection recipeId={numId} initialToken={activeShareToken} canManage={canEdit} />
         )}
 
         <RecipeBody recipe={recipe} />
