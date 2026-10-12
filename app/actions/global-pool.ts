@@ -37,6 +37,12 @@ export async function pullRecipe(
 
   const result = await pullRecipeToKitchen(originalRecipeId, destinationKitchenId);
   if (result.status === "not_found") return { ok: false, error: "Recipe not found." };
+  // Unreachable in practice — destinationKitchenId === poolId is already
+  // rejected above, and the original is always a Global Pool recipe — but
+  // handled explicitly rather than silently mis-typed.
+  if (result.status === "same_kitchen") {
+    return { ok: false, error: "This recipe is already in that kitchen." };
+  }
 
   revalidatePath("/recipes");
   revalidatePath("/randomize");

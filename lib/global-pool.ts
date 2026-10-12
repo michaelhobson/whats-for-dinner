@@ -32,6 +32,9 @@ export const getGlobalPoolRecipeIds = cache(async (): Promise<Set<number>> => {
 export type PullResult =
   | { status: "created"; recipeId: number }
   | { status: "already_exists"; recipeId: number }
+  // Destination IS the original recipe's own kitchen — nothing to pull, the
+  // recipe is already (and has always been) right there.
+  | { status: "same_kitchen"; recipeId: number }
   | { status: "not_found" };
 
 /**
@@ -41,9 +44,12 @@ export type PullResult =
  * destinationKitchenId first.
  *
  * Idempotent: if the destination already has a recipe forked from this exact
- * original, returns that recipe instead of creating a duplicate. Ratings,
- * notes, cook history, and favorite status are intentionally not copied —
- * those are kitchen-specific and start fresh in the destination.
+ * original, returns that recipe instead of creating a duplicate. Also blocks
+ * pulling into the original's own kitchen, which would otherwise create a
+ * true duplicate sitting alongside the original (no fork to find there, since
+ * it's not a fork — it's the thing itself). Ratings, notes, cook history, and
+ * favorite status are intentionally not copied — those are kitchen-specific
+ * and start fresh in the destination.
  */
 export async function pullRecipeToKitchen(
   originalRecipeId: number,
@@ -51,6 +57,10 @@ export async function pullRecipeToKitchen(
 ): Promise<PullResult> {
   const original = await prisma.recipe.findUnique({ where: { id: originalRecipeId } });
   if (!original) return { status: "not_found" };
+
+  if (original.kitchenId === destinationKitchenId) {
+    return { status: "same_kitchen", recipeId: original.id };
+  }
 
   const existing = await prisma.recipe.findFirst({
     where: { kitchenId: destinationKitchenId, forkedFromRecipeId: originalRecipeId },

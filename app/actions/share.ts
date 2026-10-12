@@ -113,6 +113,13 @@ export async function pullFromShareLink(
 
   const result = await pullRecipeToKitchen(recipe.id, destinationKitchenId);
   if (result.status === "not_found") return { ok: false, error: "Recipe not found." };
+  if (result.status === "same_kitchen") {
+    const kitchen = await prisma.kitchen.findUnique({
+      where: { id: destinationKitchenId },
+      select: { name: true },
+    });
+    return { ok: false, error: `This recipe is already in ${kitchen?.name ?? "that kitchen"}.` };
+  }
 
   revalidatePath("/recipes");
   revalidatePath("/randomize");

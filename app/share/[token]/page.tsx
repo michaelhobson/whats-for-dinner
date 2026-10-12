@@ -54,7 +54,10 @@ export default async function SharePage({
   const recipe = parseRecipe(raw as Parameters<typeof parseRecipe>[0]);
 
   const session = await auth();
-  const writableKitchens = session?.user?.id ? await getWritableKitchens() : [];
+  const writableKitchensAll = session?.user?.id ? await getWritableKitchens() : [];
+  // Pulling into the recipe's own kitchen would just create a duplicate
+  // sitting next to the original — don't even offer it as a destination.
+  const writableKitchens = writableKitchensAll.filter((k) => k.id !== raw.kitchenId);
 
   return (
     <div className="flex-1 bg-orange-50">
@@ -77,7 +80,9 @@ export default async function SharePage({
               />
               {writableKitchens.length === 0 && (
                 <p className="text-sm text-gray-500">
-                  You don&apos;t have Chef or Restaurateur access in any kitchen yet.
+                  {writableKitchensAll.length === 0
+                    ? "You don't have Chef or Restaurateur access in any kitchen yet."
+                    : "This recipe is already in the only kitchen you can pull into."}
                 </p>
               )}
             </>
