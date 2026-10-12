@@ -75,6 +75,16 @@ export function OverflowMenu({ userEmail }: { userEmail?: string }) {
           </Link>
 
           <Link
+            href="/global-pool"
+            onClick={close}
+            role="menuitem"
+            className="flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-orange-50 hover:text-orange-800 transition-colors"
+          >
+            <span aria-hidden>🌐</span>
+            Global Pool
+          </Link>
+
+          <Link
             href="/settings"
             onClick={close}
             role="menuitem"

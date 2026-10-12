@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { getGlobalPoolKitchenId } from "@/lib/global-pool";
 import type { KitchenRole } from "@/app/generated/prisma/client";
 
 const ACTIVE_KITCHEN_COOKIE = "active_kitchen_id";
@@ -116,4 +117,28 @@ export async function getKitchenRole(kitchenId: number): Promise<KitchenRole | n
 // at-least-one-Restaurateur invariant before a demotion/removal/departure.
 export async function getRestaurateurCount(kitchenId: number): Promise<number> {
   return prisma.kitchenMembership.count({ where: { kitchenId, role: "RESTAURATEUR" } });
+}
+
+// Kitchens where the current user has Chef-or-above access — the set of
+// valid destinations when pulling a recipe from the Global Pool.
+export async function getWritableKitchens(): Promise<{ id: number; name: string }[]> {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) return [];
+
+  const memberships = await prisma.kitchenMembership.findMany({
+    where: { userId, role: { in: ["RESTAURATEUR", "CHEF"] } },
+    include: { kitchen: { select: { id: true, name: true } } },
+    orderBy: { kitchen: { createdAt: "asc" } },
+  });
+  return memberships.map((m) => ({ id: m.kitchen.id, name: m.kitchen.name }));
+}
+
+// Kitchens whose recipes the current user may VIEW — their own kitchens plus
+// the Global Pool, which is readable by anyone regardless of membership (the
+// one deliberate visibility exception). Only for read paths like the recipe
+// detail page — write actions keep using getAllKitchenIds().
+export async function getReadableKitchenIds(): Promise<number[]> {
+  const [ownKitchenIds, poolId] = await Promise.all([getAllKitchenIds(), getGlobalPoolKitchenId()]);
+  return poolId && !ownKitchenIds.includes(poolId) ? [...ownKitchenIds, poolId] : ownKitchenIds;
 }

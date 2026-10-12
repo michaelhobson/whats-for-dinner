@@ -82,6 +82,13 @@ model Kitchen {
   name      String
   createdAt DateTime @default(now())
 
+  // Exactly one Kitchen should ever have this set. Its recipes are readable
+  // by ANY logged-in user regardless of membership (see lib/global-pool.ts) —
+  // the one deliberate exception to the normal kitchen-scoped visibility rule.
+  // Writes still go through the exact same Chef-or-above enforcement as any
+  // other kitchen; nothing special there.
+  isGlobalPool Boolean @default(false)
+
   recipes          Recipe[]
   memberships      KitchenMembership[]
   defaultForUsers  User[]              @relation("UserDefaultKitchen")

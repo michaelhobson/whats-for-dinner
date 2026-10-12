@@ -2,8 +2,9 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { parseRecipe, difficultyStyle, ingredientQty, ParsedRecipe } from "@/lib/recipe-utils";
-import { getAllKitchenIds, getKitchenRole } from "@/lib/kitchen";
+import { getReadableKitchenIds, getKitchenRole } from "@/lib/kitchen";
 import { canEditRecipes } from "@/lib/permissions";
+import { getGlobalPoolKitchenId } from "@/lib/global-pool";
 import { markCooked } from "@/app/actions/recipes";
 import { DeleteRecipeButton } from "@/components/DeleteRecipeButton";
 import { RatingWidget } from "@/components/RatingWidget";
@@ -11,7 +12,7 @@ import { NotesEditor } from "@/components/NotesEditor";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const kitchenIds = await getAllKitchenIds();
+  const kitchenIds = await getReadableKitchenIds();
   const raw = kitchenIds.length
     ? await prisma.recipe.findFirst({
         where: { id: Number(id), kitchenId: { in: kitchenIds } },
@@ -28,7 +29,7 @@ export default async function RecipeDetailPage({
 }) {
   const { id } = await params;
   const numId = Number(id);
-  const kitchenIds = await getAllKitchenIds();
+  const kitchenIds = await getReadableKitchenIds();
 
   const [raw, cookLogs] = await Promise.all([
     kitchenIds.length
@@ -49,6 +50,18 @@ export default async function RecipeDetailPage({
   const role = raw.kitchenId != null ? await getKitchenRole(raw.kitchenId) : null;
   const canEdit = canEditRecipes(role);
 
+  // A Global Pool recipe is reachable by non-members too (the one visibility
+  // exception) — send "back" to the pool browse page instead of a Cookbook
+  // they may not even be a member of.
+  const poolId = await getGlobalPoolKitchenId();
+  const isPoolRecipe = raw.kitchenId != null && raw.kitchenId === poolId;
+  const backHref = isPoolRecipe ? "/global-pool" : "/recipes";
+  const backLabel = isPoolRecipe ? "Global Pool" : "Cookbook";
+
+  // Rating/notes/cook-history are per-kitchen-member actions (any role) — not
+  // for outsiders browsing a Global Pool recipe via the visibility exception.
+  const isMember = role !== null;
+
   const cookCount = cookLogs.length;
   const lastCooked = cookLogs[0]?.cookedAt ?? null;
 
@@ -58,10 +71,10 @@ export default async function RecipeDetailPage({
         {/* Back + action buttons */}
         <div className="flex items-center justify-between mb-8">
           <Link
-            href="/recipes"
+            href={backHref}
             className="inline-flex items-center gap-1.5 text-sm font-medium text-orange-700 hover:text-orange-900 transition-colors"
           >
-            ← Cookbook
+            ← {backLabel}
           </Link>
           {canEdit && (
             <div className="flex items-center gap-2">
@@ -86,10 +99,12 @@ export default async function RecipeDetailPage({
           )}
         </div>
 
-        {/* Rating */}
-        <div className="mb-5">
-          <RatingWidget recipeId={numId} rating={recipe.rating} />
-        </div>
+        {/* Rating — kitchen members only */}
+        {isMember && (
+          <div className="mb-5">
+            <RatingWidget recipeId={numId} rating={recipe.rating} />
+          </div>
+        )}
 
         {/* Quick-stat chips */}
         <div className="flex flex-wrap gap-2 mb-6">
@@ -108,39 +123,41 @@ export default async function RecipeDetailPage({
           <Chip color="gray">⏱ {recipe.prepTime} min</Chip>
         </div>
 
-        {/* Cook history + mark as cooked */}
-        <div className="flex flex-wrap items-center justify-between gap-4 mb-10 bg-white rounded-2xl border border-orange-100 shadow-sm px-5 py-4">
-          <div className="text-sm text-gray-600">
-            {cookCount === 0 ? (
-              <span className="text-gray-400 italic">Never made yet</span>
-            ) : (
-              <>
-                <span className="font-semibold text-gray-800">
-                  Cooked {cookCount} {cookCount === 1 ? "time" : "times"}
-                </span>
-                {lastCooked && (
-                  <span className="text-gray-400">
-                    {" · "}Last made{" "}
-                    {lastCooked.toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
+        {/* Cook history + mark as cooked — kitchen members only */}
+        {isMember && (
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-10 bg-white rounded-2xl border border-orange-100 shadow-sm px-5 py-4">
+            <div className="text-sm text-gray-600">
+              {cookCount === 0 ? (
+                <span className="text-gray-400 italic">Never made yet</span>
+              ) : (
+                <>
+                  <span className="font-semibold text-gray-800">
+                    Cooked {cookCount} {cookCount === 1 ? "time" : "times"}
                   </span>
-                )}
-              </>
-            )}
+                  {lastCooked && (
+                    <span className="text-gray-400">
+                      {" · "}Last made{" "}
+                      {lastCooked.toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </span>
+                  )}
+                </>
+              )}
+            </div>
+            <form action={markCooked}>
+              <input type="hidden" name="id" value={numId} />
+              <button
+                type="submit"
+                className="rounded-xl bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700 transition-colors"
+              >
+                ✓ Mark as Cooked
+              </button>
+            </form>
           </div>
-          <form action={markCooked}>
-            <input type="hidden" name="id" value={numId} />
-            <button
-              type="submit"
-              className="rounded-xl bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700 transition-colors"
-            >
-              ✓ Mark as Cooked
-            </button>
-          </form>
-        </div>
+        )}
 
         <div className="space-y-10">
           {/* Main components */}
@@ -206,10 +223,12 @@ export default async function RecipeDetailPage({
             </dl>
           </Section>
 
-          {/* Notes */}
-          <Section title="Notes">
-            <NotesEditor recipeId={numId} initialNotes={recipe.notes} />
-          </Section>
+          {/* Notes — kitchen members only */}
+          {isMember && (
+            <Section title="Notes">
+              <NotesEditor recipeId={numId} initialNotes={recipe.notes} />
+            </Section>
+          )}
         </div>
       </div>
     </div>
