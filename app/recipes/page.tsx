@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { parseRecipe } from "@/lib/recipe-utils";
 import { getKitchenIds, getActiveKitchenId, getKitchenRole } from "@/lib/kitchen";
 import { canEditRecipes } from "@/lib/permissions";
+import { getGlobalPoolRecipeIds } from "@/lib/global-pool";
 import CookbookClient from "./CookbookClient";
 
 export const metadata = { title: "Cookbook — What's For Dinner?" };
@@ -10,14 +11,17 @@ export const metadata = { title: "Cookbook — What's For Dinner?" };
 export default async function RecipesPage() {
   const kitchenIds = await getKitchenIds();
 
-  const rows = kitchenIds.length
-    ? await prisma.recipe.findMany({
-        where: { kitchenId: { in: kitchenIds } },
-        orderBy: { createdAt: "desc" },
-      })
-    : [];
+  const [rows, poolRecipeIds] = await Promise.all([
+    kitchenIds.length
+      ? prisma.recipe.findMany({
+          where: { kitchenId: { in: kitchenIds } },
+          orderBy: { createdAt: "desc" },
+        })
+      : Promise.resolve([]),
+    getGlobalPoolRecipeIds(),
+  ]);
 
-  const recipes = rows.map((r) => parseRecipe(r as Parameters<typeof parseRecipe>[0]));
+  const recipes = rows.map((r) => parseRecipe(r as Parameters<typeof parseRecipe>[0], poolRecipeIds));
 
   // New recipes land in the active kitchen, so gate "+ Add Recipe" on its role.
   const activeKitchenId = await getActiveKitchenId();

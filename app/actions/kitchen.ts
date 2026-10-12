@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
 import { getKitchenRole, getRestaurateurCount } from "@/lib/kitchen";
 import { canManageKitchen } from "@/lib/permissions";
+import { seedKitchenFromGlobalPool } from "@/lib/global-pool";
 import type { KitchenRole } from "@/app/generated/prisma/client";
 
 const LAST_RESTAURATEUR_ERROR =
@@ -121,7 +122,11 @@ export async function createKitchen(
     data: { userId, kitchenId: kitchen.id, role: "RESTAURATEUR" },
   });
 
+  await seedKitchenFromGlobalPool(kitchen.id);
+
   revalidatePath("/settings");
+  revalidatePath("/recipes");
+  revalidatePath("/randomize");
   return { kitchenId: kitchen.id };
 }
 

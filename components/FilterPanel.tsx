@@ -302,6 +302,18 @@ export function FilterPanel({
         </div>
       </div>
 
+      {/* Hide starter recipes — plain boolean toggle, off by default */}
+      <label className="flex items-center gap-2.5 rounded-lg border border-gray-100 px-3 py-2.5 cursor-pointer hover:bg-gray-50/60 transition-colors">
+        <input
+          type="checkbox"
+          checked={filters.hideStarterRecipes}
+          onChange={(e) => onFiltersChange({ ...filters, hideStarterRecipes: e.target.checked })}
+          className="w-4 h-4 rounded border-gray-300 accent-orange-600 cursor-pointer"
+        />
+        <span className="text-sm font-medium text-gray-700">Hide starter recipes</span>
+        <span className="text-xs text-gray-400">(from the Global Pool)</span>
+      </label>
+
     </div>
   );
 }

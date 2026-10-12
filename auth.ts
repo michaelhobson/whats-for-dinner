@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
+import { seedKitchenFromGlobalPool } from "@/lib/global-pool";
 import { authConfig } from "./auth.config";
 
 function signInEmailHtml(url: string, host: string): string {
@@ -117,6 +118,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       await prisma.kitchenMembership.create({
         data: { userId: user.id, kitchenId: kitchen.id, role: "RESTAURATEUR" },
       });
+      await seedKitchenFromGlobalPool(kitchen.id);
     },
   },
 });

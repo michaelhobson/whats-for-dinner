@@ -58,6 +58,10 @@ export type Filters = {
   protein: string;
   starch: string;
   vegetable: string;
+  // Excludes recipes forked from the Global Pool specifically (not forks of
+  // any other kitchen). Off by default — unlike the other filters, this one
+  // is a plain boolean exclusion, not a multi-select category.
+  hideStarterRecipes: boolean;
 };
 
 // ── Default filter state ──────────────────────────────────────────────────────
@@ -76,6 +80,7 @@ export function computeDefaultFilters(): Filters {
     protein:       "",
     starch:        "",
     vegetable:     "",
+    hideStarterRecipes: false,
   };
 }
 
@@ -126,7 +131,8 @@ export function applyFilters(recipes: ParsedRecipe[], f: Filters): ParsedRecipe[
       matchRating(r.rating, f.rating) &&
       matchText(r.mainProtein, f.protein) &&
       matchText(r.mainStarch, f.starch) &&
-      matchText(r.mainVegetable, f.vegetable)
+      matchText(r.mainVegetable, f.vegetable) &&
+      (!f.hideStarterRecipes || !r.isStarterRecipe)
   );
 }
 
@@ -188,5 +194,6 @@ export function computeNarrowedCount(filters: Filters): number {
   if (filters.protein.trim()) n++;
   if (filters.starch.trim()) n++;
   if (filters.vegetable.trim()) n++;
+  if (filters.hideStarterRecipes) n++;
   return n;
 }

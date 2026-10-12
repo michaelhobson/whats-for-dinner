@@ -37,6 +37,10 @@ export type ParsedRecipe = {
   forkedFromRecipeId: number | null;
   createdAt: Date;
   updatedAt: Date;
+  // True when forkedFromRecipeId traces back to a Global Pool recipe
+  // specifically (not a fork of some other kitchen's recipe). Derived at
+  // parse time, not stored — see parseRecipe's poolRecipeIds argument.
+  isStarterRecipe: boolean;
 };
 
 type RawRecipe = Omit<
@@ -49,6 +53,7 @@ type RawRecipe = Omit<
   | "season"
   | "cookingMethod"
   | "rating"
+  | "isStarterRecipe"
 > & {
   ingredients: string;
   directions: string;
@@ -89,7 +94,11 @@ function parseDirections(raw: string | null | undefined): string[] {
   }
 }
 
-export function parseRecipe(raw: RawRecipe): ParsedRecipe {
+// poolRecipeIds: ids of recipes currently in the Global Pool kitchen — pass
+// this (see lib/global-pool.ts's getGlobalPoolRecipeIds) wherever the "Hide
+// starter recipes" filter is offered (Cookbook, Randomizer). Omit it anywhere
+// else; isStarterRecipe just comes back false, which is inert there.
+export function parseRecipe(raw: RawRecipe, poolRecipeIds?: Set<number>): ParsedRecipe {
   return {
     ...raw,
     ingredients: JSON.parse(raw.ingredients) as Ingredient[],
@@ -100,6 +109,7 @@ export function parseRecipe(raw: RawRecipe): ParsedRecipe {
     season: csv(raw.season),
     cookingMethod: csv(raw.cookingMethod),
     rating: raw.rating === "up" || raw.rating === "down" ? raw.rating : null,
+    isStarterRecipe: raw.forkedFromRecipeId != null && (poolRecipeIds?.has(raw.forkedFromRecipeId) ?? false),
   };
 }
 

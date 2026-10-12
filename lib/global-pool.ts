@@ -18,6 +18,17 @@ export const getGlobalPoolKitchenId = cache(async (): Promise<number | null> => 
   return pool?.id ?? null;
 });
 
+// Ids of recipes currently IN the Global Pool kitchen — used to decide
+// whether a recipe elsewhere is "starter" (forked from the pool specifically,
+// not from some other kitchen). Memoized per-request like the id lookup above.
+export const getGlobalPoolRecipeIds = cache(async (): Promise<Set<number>> => {
+  const poolId = await getGlobalPoolKitchenId();
+  if (!poolId) return new Set();
+
+  const rows = await prisma.recipe.findMany({ where: { kitchenId: poolId }, select: { id: true } });
+  return new Set(rows.map((r) => r.id));
+});
+
 export type PullResult =
   | { status: "created"; recipeId: number }
   | { status: "already_exists"; recipeId: number }
@@ -70,4 +81,32 @@ export async function pullRecipeToKitchen(
   });
 
   return { status: "created", recipeId: copy.id };
+}
+
+/**
+ * Auto-seeds a freshly-created kitchen with the full Global Pool recipe set,
+ * going forward only (never called retroactively against existing kitchens).
+ * Calls the exact same pullRecipeToKitchen used by the manual "Pull to my
+ * kitchen" action, once per pool recipe, so lineage (forkedFromRecipeId) and
+ * idempotency behave identically to a manual pull.
+ *
+ * Best-effort: a failure copying one recipe is logged and skipped rather than
+ * failing kitchen creation outright.
+ */
+export async function seedKitchenFromGlobalPool(destinationKitchenId: number): Promise<void> {
+  const poolId = await getGlobalPoolKitchenId();
+  if (!poolId || destinationKitchenId === poolId) return;
+
+  const poolRecipes = await prisma.recipe.findMany({
+    where: { kitchenId: poolId },
+    select: { id: true },
+  });
+
+  for (const { id } of poolRecipes) {
+    try {
+      await pullRecipeToKitchen(id, destinationKitchenId);
+    } catch (e) {
+      console.error(`Failed to seed recipe ${id} into kitchen ${destinationKitchenId}:`, e);
+    }
+  }
 }

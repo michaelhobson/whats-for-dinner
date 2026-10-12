@@ -91,6 +91,7 @@ function toInitialData(recipe: {
     notes: null,
     sourceUrl: recipe.sourceUrl ?? null,
     forkedFromRecipeId: null,
+    isStarterRecipe: false,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
