@@ -15,7 +15,7 @@ Every mutation in this app needs to get three things right, independently of eac
 
 ## 2. Enforce the permission model server-side
 
-Reference CLAUDE.md §8 — role is per-`KitchenMembership`, never a global property of the user:
+Reference `docs/PERMISSIONS.md` — role is per-`KitchenMembership`, never a global property of the user:
 
 - **RESTAURATEUR** — full permissions, including kitchen settings and membership.
 - **CHEF** — recipes (add/edit/delete/import), rate, notes, cook history. Cannot change settings or membership.
@@ -25,7 +25,7 @@ Check the actual `KitchenMembership` role inside the server action itself — hi
 
 ## 3. Never fail silently
 
-Per CLAUDE.md §7, any failure path — a bad input, a permission check that fails, a database error — must surface a clear, visible error to the user. A failure that only shows up in the server console doesn't count as handled.
+Per CLAUDE.md's Definition of done, any failure path — a bad input, a permission check that fails, a database error — must surface a clear, visible error to the user. A failure that only shows up in the server console doesn't count as handled.
 
 ## 4. Revalidate every affected view
 
@@ -40,8 +40,8 @@ Don't assume a page will pick up the change on its own. Test it directly: make t
 
 ## 5. Match existing conventions
 
-TypeScript throughout, functional style, land the action in the right file under `/app/actions` (`recipes.ts`, `import.ts`, etc.) and only start a new file for a genuinely new domain. If the action needs an AI API call for multiple items (e.g. several ambiguous ingredient lines), batch it into one request rather than one call per item, and prefer rule-based logic first per CLAUDE.md §6.
+TypeScript throughout, functional style, land the action in the right file under `/app/actions` (`recipes.ts`, `import.ts`, etc.) and only start a new file for a genuinely new domain — as recent examples, `global-pool.ts` and `share.ts` each earned their own file because they're a distinct domain, not because the existing files were getting long. If the action needs an AI API call for multiple items (e.g. several ambiguous ingredient lines), batch it into one request rather than one call per item, and prefer rule-based logic first per CLAUDE.md's Conventions. If a similar mechanic already exists elsewhere (e.g. a copy/fork operation), extend it rather than writing a parallel version — see CLAUDE.md's "Reuse over parallel implementations."
 
 ## Before calling it done
 
-Click through it manually in the browser per CLAUDE.md §7: the mutation works, a deliberately-triggered failure shows a clear error, every affected view updates immediately with no extra refresh needed, and nothing from prior phases regressed.
+Click through it manually in the browser per CLAUDE.md's Definition of done: the mutation works, a deliberately-triggered failure shows a clear error, every affected view updates immediately with no extra refresh needed, and nothing from prior phases regressed.

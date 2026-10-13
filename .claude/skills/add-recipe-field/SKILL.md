@@ -13,13 +13,13 @@ First, figure out which of the two cases this is — they have different scope.
 
 (e.g. adding "Ethiopian" to cuisine regions, a new flavor note, a new cooking method, a new dish category — the field already exists, you're just adding an allowed value.)
 
-1. **Find the canonical list.** Cuisine region/style lives in `lib/cuisine.ts`; check whether the other taxonomies (flavor notes, cooking methods, seasons, difficulty, dish categories) are plain string arrays in application code or Prisma `enum`s in `schema.prisma`. If it's a Prisma enum, adding a value requires a schema change and `npx prisma migrate dev` — follow the database safety rules in CLAUDE.md §5 (local only, confirm before touching production).
-2. **Check for a second, hardcoded copy of the list.** Before adding the value in one place, confirm the add-recipe form, edit form, and randomizer filter all *import* the canonical list rather than keeping their own copy. If any of them hardcode their own options, that's worth flagging and fixing now rather than adding yet another place that can drift out of sync.
+1. **Find the canonical list.** Cuisine region/style lives in `lib/cuisine.ts`; Dish Category is a fixed list in `lib/dish-categories.ts`; check whether the other taxonomies (flavor notes, cooking methods, seasons, difficulty) are plain string arrays in application code or Prisma `enum`s in `schema.prisma`. If it's a Prisma enum, adding a value requires a schema change and `npx prisma migrate dev` — follow the database safety rules in CLAUDE.md's Critical rules (local only, confirm before touching production).
+2. **Check for a second, hardcoded copy of the list.** Before adding the value in one place, confirm the add-recipe form, edit form, and the shared filter panel all *import* the canonical list rather than keeping their own copy. If any of them hardcode their own options, that's worth flagging and fixing now rather than adding yet another place that can drift out of sync.
 3. **Add-recipe form** (`AddRecipeForm` / wherever recipes are created): confirm the new value is selectable.
 4. **Edit recipe form:** confirm parity with the add form — a value that's addable but not editable later is a common gap.
-5. **Recipe detail view:** confirm the new value displays using the same rendering as existing values in that taxonomy (no missing icon/label case).
+5. **Recipe detail view:** confirm the new value displays using the same rendering as existing values in that taxonomy (no missing icon/label case) — `components/RecipeDetailView.tsx` is shared by the recipe detail page and the public share page, so a fix there covers both automatically.
 6. **Browse page recipe card:** confirm it shows up there too, if that taxonomy is normally shown on the card.
-7. **Randomizer filter (`RandomizerClient`):** add the value as a filter option, and specifically re-test the known failure mode — pick a recipe with this field left null/empty and confirm it still appears in *unfiltered* results and isn't silently dropped by the filtered view. Confirm the filter's count display updates correctly too.
+7. **Shared filter panel (`lib/recipe-filters.ts` + `components/FilterPanel.tsx`):** add the value as a filter option here, not in either page directly — the Randomizer and Cookbook both use this one implementation. Specifically re-test the known failure mode on *both* pages — pick a recipe with this field left null/empty and confirm it still appears in *unfiltered* results and isn't silently dropped by the filtered view. Confirm the filter's count display updates correctly too.
 8. **Seed data (`prisma/seed.ts`):** not required, but decide deliberately whether any seed recipes should use the new value rather than leaving it to chance.
 
 ## Case B: an entirely new field on the Recipe model
@@ -33,8 +33,8 @@ Everything in Case A, plus:
 
 ## Before calling it done
 
-Click through it manually in the browser per CLAUDE.md §7 — don't just read the code:
-- The new value/field is visible and correct on browse cards, detail view, add form, edit form, and randomizer filters.
+Click through it manually in the browser per CLAUDE.md's Definition of done — don't just read the code:
+- The new value/field is visible and correct on browse cards, detail view, add form, edit form, and the shared filter panel (check both the Randomizer and the Cookbook).
 - A recipe that doesn't have this field/value set behaves correctly everywhere (no silent exclusion, no crash).
 - No console errors.
 - Prior phases (recipe list, form, randomizer) still work.

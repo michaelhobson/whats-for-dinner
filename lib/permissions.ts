@@ -1,5 +1,5 @@
 /**
- * Pure role-check helpers for the Kitchen permission model (CLAUDE.md §8).
+ * Pure role-check helpers for the Kitchen permission model (docs/PERMISSIONS.md).
  * Role is per-KitchenMembership, never a global property of the user — always
  * pass the role for the SPECIFIC kitchen the action targets.
  */

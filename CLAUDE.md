@@ -1,137 +1,87 @@
 @AGENTS.md
-## 1. Project Overview
 
-"What's For Dinner?" is a personal recipe database and randomizer, originally built for the developer and his girlfriend, that helps decide what to make for dinner by picking from (and filtering) a curated list of recipes they've cooked or want to try. The app now supports multiple accounts, each with their own "Kitchen" (a private recipe collection that can grow into a shared household with multiple members and permission levels). It's a small, personal-scale product for a household and a circle of friends — not built for public/anonymous signup at this time.
+# What's For Dinner?
 
-## 2. Tech Stack
+A recipe database and randomizer for a household and a small circle of friends (deployed at menuroulette.app). Each account has a "Kitchen": a recipe collection that can be shared by multiple members with different permission levels. Not built for public/anonymous signup.
 
-- **Framework:** Next.js (App Router, TypeScript)
-- **Styling:** Tailwind CSS
-- **Database ORM:** Prisma
-- **Database:** PostgreSQL (hosted on Vercel Postgres in production; a local Postgres instance for development — not SQLite)
-- **Hosting:** Vercel
-- **Auth:** Auth.js (NextAuth v5), email magic-link login via Resend
-- **AI features:** Anthropic API (`claude-haiku-4-5-20251001`) — used for photo-based recipe import and as a fallback for ingredient-line parsing that rule-based logic can't confidently handle
-- **Package manager:** whatever `create-next-app` set up by default (npm unless told otherwise)
+## Working with the developer
 
-## 3. Architecture & Directory Structure
+- The developer is a beginner who reviews results in the browser, not in code. After each change, explain what changed in plain language and say where to click to verify it.
+- Before building anything with UX or architectural implications, surface the edge cases and ask. Don't decide them silently.
+- Build only the current task or phase. `docs/ROADMAP.md` is context, not a to-do list. Don't build ahead of it.
+- When work meets the Definition of Done, propose a commit. Don't commit unprompted.
 
-Standard Next.js App Router conventions apply.
+## Stack
 
-```
-/app
-  /actions          — server actions: recipes.ts, import.ts, import-photo.ts, import-url.ts
-  /api/auth         — Auth.js route handler ([...nextauth]/route.ts)
-  /api/export       — GET: download kitchen recipes as JSON backup
-  /login            — magic-link sign-in form + /check-email confirmation page
-  /randomize        — randomizer page (server) + RandomizerClient (client filters + draw)
-  /recipes          — browse page; /[id] detail + edit; /new add-recipe + import form
-  /settings         — backup (export) and restore (JSON import)
-  page.tsx          — homepage
-/components         — NavBar, RecipeCard, AddRecipeForm, and other shared UI
-/lib
-  prisma.ts         — Prisma client singleton (PrismaPg adapter)
-  kitchen.ts        — getKitchenId() for writes; getKitchenIds() for reads
-  recipe-utils.ts   — ParsedRecipe type, parseRecipe(), display helpers
-  cuisine.ts        — region/style lists, CuisinePairing type
-  ingredient-parser.ts — ingredient line parsing and unit normalization
-/prisma
-  schema.prisma     — full data model (Auth.js models, Kitchen, KitchenMembership, Recipe, CookLog)
-  seed.ts           — sample data for local development
-  migrate-kitchen.ts — one-time script to backfill kitchenId on existing recipes
-/types
-  next-auth.d.ts    — extends Session to include user.id
+- Next.js 16 (App Router, TypeScript), React 19, Tailwind CSS 4
+- Prisma 7 with the PrismaPg adapter; PostgreSQL (local Postgres in dev, hosted Postgres on Vercel in production)
+- Auth.js v5 (NextAuth beta): email magic-link login via Resend, JWT sessions
+- Anthropic SDK with Claude Haiku for photo recipe import and ingredient-line fallback parsing. Keep the model ID in one place in the code; never hardcode a second copy.
+- `qrcode` + `html-to-image` for the shareable recipe card image: `qrcode` generates the QR, `html-to-image` rasterizes a real HTML/CSS layout to PNG client-side. See `lib/qr.ts` and `lib/recipe-card.ts`.
+- npm (`package-lock.json`)
 
-auth.config.ts      — Edge-compatible Auth.js config (no Prisma); imported by proxy
-auth.ts             — full Auth.js config: Prisma adapter, Resend, JWT sessions
-proxy.ts            — session-based route protection (all routes except /login, /api/auth); renamed from middleware.ts per Next.js 16 convention
-prisma.config.ts    — Prisma 7 config: schema path, DATABASE_URL (not inside /prisma/)
-```
+## Commands
 
-Keep data-fetching logic in server components or route handlers where possible rather than client-side fetches, per standard Next.js App Router practice.
+- `npm run dev` — local dev server
+- `npm run build` — runs `prisma generate && next build`
+- `npx tsc --noEmit` — typecheck (there is no lint or test script)
+- `npx prisma migrate dev` — apply schema changes to the LOCAL database
+- `npx prisma studio` — inspect the database
+- `npx tsx prisma/seed.ts` — seed sample data (see Database Safety before running)
 
-## 4. Core Commands
+Before saying work is done, run the typecheck and `npm run build` and fix any errors.
 
-- `npm run dev` — start the local dev server
-- `npx prisma migrate dev` — apply schema changes to the local database
-- `npx prisma studio` — open a GUI to inspect/edit the database directly (useful for debugging without writing queries)
-- `npx tsx prisma/seed.ts` (or equivalent) — re-run the seed script
-- `git add . && git commit -m "..."` — commit a working checkpoint after each completed phase
+## Non-obvious architecture
 
-## 5. Database Safety
+- **Kitchen scoping:** `lib/kitchen.ts` provides `getKitchenId()`/`getKitchenIds()` (active kitchen) and `getAllKitchenIds()` (every kitchen the caller belongs to, for ownership checks). `getReadableKitchenIds()` adds the one deliberate exception: the Global Pool's recipes are readable by anyone regardless of membership.
+- **Role checks:** `lib/permissions.ts` (`canEditRecipes` = Chef-or-above, `canManageKitchen` = Restaurateur-only) are pure functions over a role string; `lib/kitchen.ts`'s `getKitchenRole()` does the actual per-kitchen membership lookup. Every action calls both — see Critical rules below.
+- **Auth split:** `auth.config.ts` is Edge-safe and must never import Prisma. `auth.ts` is the full config; on first login it also creates a personal Kitchen and auto-seeds it from the Global Pool. Route protection lives in `proxy.ts` (also excludes `/invite` and `/share`, which are public). Use `proxy.ts`, not `middleware.ts`.
+- **Prisma config:** `prisma.config.ts` is at the repo root, not in `/prisma`, and reads `DATABASE_URL`.
+- **Import paths:** URL, photo, and paste imports all converge on the `ParsedRecipe` shape in `lib/recipe-utils.ts`. Keep them aligned.
+- **Server actions** live in `app/actions/`. Prefer server components and route handlers over client-side fetching.
+- **Global Pool & recipe forking:** `lib/global-pool.ts`'s `pullRecipeToKitchen()` is the one shared fork/copy mechanic — reused by the Global Pool "Pull to my kitchen" action, share-link pulls, and auto-seeding a newly-created kitchen. It sets `forkedFromRecipeId` on the copy and is idempotent (pulling the same original into the same kitchen twice, or into the original's own kitchen, is a no-op/blocked rather than a duplicate). Don't add a second copy mechanism for a similar feature — extend this one.
+- **Recipe sharing:** `Recipe.shareToken`/`shareRevokedAt` back an unlisted public link at `/share/[token]` (force-dynamic, noindex, excluded from the auth gate). Share links and the Global Pool are the app's only two intentional exceptions to "a kitchen's recipes are only visible to its members" — both are narrowly scoped (read-only content; rating/notes/cook-history still require real membership) rather than a general relaxation.
+- **Shared filter UI:** `lib/recipe-filters.ts` + `components/FilterPanel.tsx` implement filtering once and are used identically by the Randomizer and the Cookbook. Add a new filter there, not in either page.
 
-Never run a script or command that deletes, truncates, or resets data (deleteMany, migrate reset, db push --force-reset, etc.) against the production database. Any destructive database operation must default to the LOCAL database only, and must require explicit confirmation before running against production. When in doubt about which database a command will affect, ask before running it.
+## Critical rules
 
-## 6. Code & Design Conventions
+**IMPORTANT: Tenancy.** Every Recipe/CookLog query and mutation must be scoped through `getKitchenId()` / `getKitchenIds()`. Never fetch or modify a recipe by ID alone. Every mutation must check the caller's role in that kitchen, in the server action itself — hiding or disabling a button in the UI is a UX nicety, never the enforcement; the action must reject a direct call too. Role belongs to a KitchenMembership, never to a User globally. A kitchen must always keep at least one Restaurateur. Read `docs/PERMISSIONS.md` before touching membership, invites, or role checks.
 
-- **TypeScript throughout** — no plain `.js` files for app code.
-- **Component style:** functional components with hooks; no class components.
-- **Styling:** Tailwind utility classes; avoid introducing a second styling system (no CSS modules, styled-components, etc.) unless there's a strong reason.
-- **Visual tone:** warm, appetizing, a little playful — this is a fun household tool, not enterprise software. Some visual flourish (icons, color, animation on the randomizer) is welcome and encouraged, not something to strip out for minimalism's sake.
-- **Mobile-friendly:** layouts should work on a phone-sized screen as well as a laptop browser.
-- **Dependencies:** prefer what's already installed; only add a new package when it clearly earns its place, and mention what was added and why.
-- **Comments:** not required for every function, but leave a short comment anywhere the logic is non-obvious.
-- **Secrets:** never paste API keys, connection strings, or other secrets into a prompt as literal text — reference that they're already set in `.env` / Vercel and let the code read them from the environment.
-- **AI-powered features:** prefer deterministic, rule-based logic first; only fall back to an Anthropic API call for cases that logic can't confidently handle (this is how ingredient-line parsing works, and should be the default pattern for future AI-assisted features too). When an API call is needed for multiple items in one operation (e.g. several ambiguous ingredient lines, several photos of one recipe), batch them into a single request rather than issuing one call per item.
+**IMPORTANT: Database safety.**
+- Never run anything that deletes, truncates, or resets data (`deleteMany`, `migrate reset`, `db push --force-reset`, `seed.ts --force`) against production.
+- Before any migrate, seed, or destructive script, check that `DATABASE_URL` points at the local database. If you can't tell, stop and ask.
+- Destructive operations default to local only and need explicit confirmation for anything else.
 
-## 7. Definitions of Done
+**IMPORTANT: Secrets.** Never put API keys, connection strings, or other secrets into prompts, code, or commits. Reference variables from `.env` / Vercel and read them from the environment.
 
-A feature/phase is done when:
+## Conventions
 
-- It works when clicked through manually in the browser (not just "the code looks right") — assume the person reviewing is checking behavior, not code.
-- There are no console errors in the browser dev tools during normal use of the new feature.
-- Existing features from prior phases still work (don't regress the recipe list, form, or randomizer while building a new piece).
-- The dev server starts cleanly with `npm run dev` and the relevant page loads without a crash.
-- New fields/tags added to the data model are reflected everywhere they should appear (browse cards, detail view, add-recipe form, randomizer filters) — a tag that only exists in the database but isn't visible/filterable anywhere is not done.
-- Any mutation (create, update, delete) triggers the necessary cache revalidation so the change is reflected immediately everywhere it should appear (browse page, randomizer, etc.), without requiring an unrelated action elsewhere in the app to trigger a refresh.
-- Failures are never silent — a failed save or action always surfaces a clear, visible error message to the user.
+- TypeScript throughout; functional components with hooks; Tailwind only (no CSS modules or styled-components).
+- Visual tone: warm, appetizing, a little playful. Flourish (icons, color, randomizer animation) is encouraged.
+- Mobile-first layouts that also work on a laptop.
+- Prefer installed dependencies. When adding a package, say what and why.
+- Comment only where logic is non-obvious.
+- **AI features:** try deterministic, rule-based logic first and call the Anthropic API only for cases it can't handle confidently. When several items need the API in one operation, batch them into a single request.
+- **Reuse over parallel implementations:** when a new feature resembles something that already exists, extend the existing function/component (with a parameter, if needed) rather than forking it. Example: the Global Pool pull, share-link pull, and kitchen auto-seeding all call the one `pullRecipeToKitchen()`; the share popover, kitchen switcher, and overflow menu all use the same outside-click/Escape popover pattern.
 
-## 8. Kitchen Permission Levels
+## Definition of done
 
-Roles are scoped per KitchenMembership (a user can hold different roles in different kitchens — never treat role as a global per-user property).
+- Clicked through manually in the browser, with no console errors in normal use.
+- Existing features (recipe list, add form, randomizer, import) still work.
+- Typecheck and `npm run build` pass.
+- New fields/tags appear everywhere they should: browse cards, detail view, add/edit form, randomizer filters.
+- **Null/empty handling:** randomizer filters must not silently exclude recipes whose tag values are null or empty.
+- Every mutation revalidates the caches for every view it affects (browse, randomizer, detail) so changes show up immediately.
+- Failures are never silent: a failed save or action shows a clear, visible error.
 
-- **RESTAURATEUR**: Full permissions. Can change all kitchen settings (add/remove members, set member roles), and can add/edit/delete recipes (including via import), rate, write notes, and log cook history. Assume Restaurateur can do anything that's possible within a kitchen.
-- **CHEF**: Can add/edit/delete recipes (including via import), rate recipes, write notes, and log cook history. Can view kitchen settings and membership but cannot change them.
-- **DINER**: Read-only on recipes and settings/membership. Can still rate, write notes, and log cook history on recipes — these are considered low-risk personal-use actions, not content changes.
+Before adding a taxonomy field or a server action, check `.claude/skills/` for a matching skill and follow it. It replaces the checklist above for that kind of work.
 
-All members of a kitchen, regardless of role, can view all recipes and use the randomizer/dinner-selection features.
+## Reference docs (read on demand)
 
-**Invariant: a kitchen must always have at least one Restaurateur.** Block the last remaining Restaurateur from demoting themselves or leaving/being removed from the kitchen. They must promote another member to Restaurateur first.
+- `docs/PERMISSIONS.md` — Kitchen roles and permission rules. Read before touching membership, invites, or role checks.
+- `docs/ROADMAP.md` — phase status and planned-feature architecture notes. Read before starting a new phase or making schema decisions for a planned feature. Update its status checklist when a phase completes.
 
-**Ratings, notes, and cook history are currently shared per recipe** (one value per recipe, visible and editable by any member with permission to do so — last write wins). This is intentional for now, not an oversight (see Future Roadmap below).
-
-## 9. Current Status
-
-*Update this section as phases are completed, so future sessions know where things stand.*
-
-- [x] Phases 1.1–6 — Project setup, basic features, and initial polish
-- [x] Phase 2.1 — Foundation (edit/delete, directions, cook history, ratings)
-- [x] Phase 2.2 — Push to web
-- [x] Phase 2.3 — Import (URL, photo, multi-photo, structured ingredient parsing)
-- [x] Phase 2.4a — Accounts: auth + Kitchen data model + migration of existing recipes
-- [x] Phase 2.4b — Accounts: scope all reads/writes to the current user's kitchen
-- [x] Phase 2.4c — Kitchen invites and permission-level enforcement (Restaurateur/Chef/Diner)
-- [ ] Phase 2.5 — Share features
-- [ ] Phase 2.6 — Planning tools (full week mode, shopping list)
-- [ ] Phase 2.7 — Dinner party mode
-
-## 10. Future Roadmap & Non-Goals
-
-### Planned (with architecture notes to keep in mind now)
-
-**Accounts model:** Recipes, ratings, notes, and cook history belong to a "Kitchen," not directly to a User. A KitchenMembership join table links Users to Kitchens with a role (Restaurateur/Chef/Diner). Every user gets one personal Kitchen by default; a Kitchen can have multiple members, and a User can belong to multiple Kitchens. Do not simplify this back to a direct User-owns-Recipe relationship.
-
-**Recipe provenance:** Recipe has nullable `sourceUrl` and `forkedFromRecipeId` fields, unused until cross-kitchen recipe sharing is built. Keep these fields when touching the Recipe model.
-
-**Global recipe pool:** Will be implemented as a regular Kitchen (not a separate system), likely flagged with an `isGlobalPool` boolean or well-known ID. "Trusted" push access = CHEF-or-above membership in that Kitchen, granted the same way any kitchen membership is granted. "Pulling" a recipe into your own kitchen creates a new Recipe row with `forkedFromRecipeId` set to the original — an explicit copy, not a live sync. Reuse Kitchen/KitchenMembership entirely; don't build a parallel permissions system.
-
-**Per-person recipe feedback:** Ratings, notes, and cook history will eventually become per-kitchen-member rather than a single shared value per recipe — e.g. each member's own thumbs up/down aggregating into a kitchen-wide net rating, a shared cook-history log showing who cooked what and when, and notes behaving more like a comment thread (multiple entries, attributed) rather than one shared text field. Not being built yet.
-
-**Dinner party mode:** Will need new recipe categories (side dishes, appetizers, beverages) in addition to the existing meal types — a schema decision to make when this phase starts, not before.
-
-**Planning tools (shopping list):** The structured quantity/unit/ingredient format already built for recipe import means the data needed to aggregate a shopping list already exists — no additional ingredient-schema work should be needed when this phase starts.
-
-### Deferred / not currently planned
-
-- **Public APIs** (add recipe, randomize, dinner party, full week) — only build if a concrete need arises (e.g. personal automation like a voice-assistant shortcut); not being built speculatively.
-- **Video ingestion** from Instagram/TikTok/YouTube (downloading and transcribing video) — flagged early on as high-complexity and fragile (platform ToS and technical reliability both work against it). If revisited, start with something much smaller, like parsing a pasted caption/description rather than the video itself.
+Invariants to preserve while working on anything:
+- Recipes belong to a Kitchen, not directly to a User. Don't collapse this.
+- `forkedFromRecipeId` is live and actively used (Global Pool pulls, share-link pulls, kitchen auto-seeding) — it is not a reserved-for-later field. Keep it in sync if the Recipe model changes.
+- Ratings, notes, and cook history are intentionally shared per recipe for now (last write wins).
