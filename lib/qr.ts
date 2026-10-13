@@ -24,9 +24,15 @@ export async function generateQrDataUrl(
   if (options?.embedLogo !== false) {
     const ctx = canvas.getContext("2d");
     if (ctx) {
-      const markSize = Math.round(sizePx * 0.22);
-      const cx = sizePx / 2;
-      const cy = sizePx / 2;
+      // Center against the canvas's ACTUAL final pixel dimensions, not the
+      // requested sizePx — the qrcode library's own width/margin/scale math
+      // (see getImageWidth in its renderer) floors to a computed size that
+      // isn't guaranteed to exactly equal what was asked for.
+      const w = canvas.width;
+      const h = canvas.height;
+      const cx = w / 2;
+      const cy = h / 2;
+      const markSize = Math.round(Math.min(w, h) * 0.22);
 
       // White circular backdrop so the mark reads clearly against the modules.
       ctx.fillStyle = QR_LIGHT;
@@ -37,7 +43,23 @@ export async function generateQrDataUrl(
       ctx.font = `${markSize}px sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText("🍽️", cx, cy + 2);
+
+      // textAlign/textBaseline center the glyph's ADVANCE box, not its
+      // visible ink — and different platforms' built-in emoji fonts (Apple
+      // Color Emoji, Noto Color Emoji, Segoe UI Emoji) bake different
+      // internal padding into the same codepoint, so the gap between those
+      // two varies by device. Measuring the actual rendered bounding box and
+      // compensating is what makes this land correctly everywhere, rather
+      // than happening to look right on whichever font was tested against.
+      const metrics = ctx.measureText("🍽️");
+      const boxLeft = metrics.actualBoundingBoxLeft ?? markSize / 2;
+      const boxRight = metrics.actualBoundingBoxRight ?? markSize / 2;
+      const boxAscent = metrics.actualBoundingBoxAscent ?? markSize / 2;
+      const boxDescent = metrics.actualBoundingBoxDescent ?? markSize / 2;
+      const offsetX = (boxLeft - boxRight) / 2;
+      const offsetY = (boxAscent - boxDescent) / 2;
+
+      ctx.fillText("🍽️", cx + offsetX, cy + offsetY);
     }
   }
 
