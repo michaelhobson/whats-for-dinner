@@ -6,8 +6,8 @@ import {
   CardTier,
   CardBadge,
   CARD_TIER_STYLES,
-  computeZones,
   CONTENT_WIDTH,
+  computeZones,
   ContentMeasurements,
 } from "@/lib/recipe-card";
 import { CardTitle, CardBadgeRow, IngredientLine, DirectionLine } from "@/components/RecipeCardParts";
@@ -59,7 +59,7 @@ export function RecipeCardListMeasurer({
   return (
     <div style={{ position: "fixed", left: -9999, top: 0, pointerEvents: "none" }} aria-hidden>
       <div style={{ width: CONTENT_WIDTH, fontFamily: "Arial, Helvetica, sans-serif" }}>
-        <CardTitle name={name} fontSize={style.nameSize} width={zones.titleColumnWidth} titleRef={titleRef} />
+        <CardTitle name={name} fontSize={style.nameSize} width={zones.logoTitleColumnWidth} titleRef={titleRef} />
 
         <CardBadgeRow badges={badges} fontSize={style.badgeSize} rowRef={badgesRef} />
 

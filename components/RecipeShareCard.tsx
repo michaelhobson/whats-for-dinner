@@ -9,11 +9,13 @@ import {
   computeZones,
   computeBadges,
   QR_TILE_PADDING,
+  LOGO_TITLE_GAP,
   HEADER_GAP,
   MORE_GAP,
 } from "@/lib/recipe-card";
 import {
   CardTitle,
+  CardLogoLockup,
   CardBadgeRow,
   CardSectionLabel,
   IngredientLine,
@@ -62,52 +64,42 @@ export function RecipeShareCard({
       }}
       className="bg-orange-50"
     >
-      {/* Logo zone — top-left, permanent, never overlapped by other content */}
-      <div
-        style={{
-          position: "absolute",
-          top: SAFE_MARGIN,
-          left: SAFE_MARGIN,
-          width: zones.logoZoneWidth,
-          height: zones.cornerZoneHeight,
-        }}
-        className="flex items-start"
-      >
-        <span style={{ fontSize: style.logoIconSize, lineHeight: 1 }}>🍽️</span>
+      {/* Logo + title column — top-left, width = whatever's left beside the
+          QR zone. The QR zone's own height plays no part in positioning
+          anything below this column. */}
+      <div style={{ position: "absolute", top: SAFE_MARGIN, left: SAFE_MARGIN, width: zones.logoTitleColumnWidth }}>
+        <CardLogoLockup />
+        <div style={{ height: LOGO_TITLE_GAP }} />
+        <CardTitle name={recipe.name} fontSize={style.nameSize} width={zones.logoTitleColumnWidth} />
       </div>
 
-      {/* QR zone — top-right, permanent, never overlapped by other content */}
+      {/* QR zone — top-right, fixed size and position; any empty space below
+          it (when the title column is shorter) is expected */}
       <div
         style={{
           position: "absolute",
           top: SAFE_MARGIN,
           right: SAFE_MARGIN,
           width: zones.qrZoneWidth,
-          height: zones.cornerZoneHeight,
+          height: zones.qrZoneHeight,
         }}
         className="flex flex-col items-center"
       >
-        <div style={{ padding: QR_TILE_PADDING }} className="bg-white rounded-2xl border border-orange-100">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={qrDataUrl}
-            width={style.qrSize}
-            height={style.qrSize}
-            alt=""
-            style={{ display: "block", width: style.qrSize, height: style.qrSize }}
-          />
+        <div style={{ padding: QR_TILE_PADDING }} className="bg-white rounded-2xl border-4 border-orange-100">
+          {qrDataUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={qrDataUrl}
+              width={style.qrSize}
+              height={style.qrSize}
+              alt=""
+              style={{ display: "block", width: style.qrSize, height: style.qrSize }}
+            />
+          )}
         </div>
         <p style={{ fontSize: style.captionSize, marginTop: 8 }} className="text-orange-700 text-center">
           Scan for the full recipe
         </p>
-      </div>
-
-      {/* Title — constrained to the column between the two corner zones;
-          wraps to a 2nd line rather than ever shrinking or overlapping */}
-      <div
-        style={{ position: "absolute", top: SAFE_MARGIN, left: SAFE_MARGIN + zones.titleColumnLeft, width: zones.titleColumnWidth }}
-      >
-        <CardTitle name={recipe.name} fontSize={style.nameSize} width={zones.titleColumnWidth} />
       </div>
 
       {/* Content zone — strictly bounded between the title/corner row and the

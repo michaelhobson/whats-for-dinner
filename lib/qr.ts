@@ -1,11 +1,11 @@
 import QRCode from "qrcode";
 
 // High error-correction (level H tolerates ~30% obstruction) so a small
-// centered logo mark can sit on top without breaking scans. Colors use the
-// app's orange accent rather than plain black — darker end of the palette
-// (orange-800) specifically for contrast margin, since scan reliability
-// matters more here than an exact color match.
-const QR_DARK = "#9a3412";
+// centered logo mark can sit on top without breaking scans. Dark modules use
+// the app's brighter primary accent (orange-600, same as its main buttons)
+// per explicit request — if this scans unreliably, drop back to a darker
+// shade (e.g. orange-800 "#9a3412") for more contrast margin.
+const QR_DARK = "#ea580c";
 const QR_LIGHT = "#ffffff";
 
 export async function generateQrDataUrl(

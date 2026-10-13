@@ -1,6 +1,6 @@
 import type { Ref } from "react";
 import { Ingredient, ingredientQty } from "@/lib/recipe-utils";
-import { CardBadge } from "@/lib/recipe-card";
+import { CardBadge, LOGO_ICON_SIZE, LOGO_TEXT_SIZE, LOGO_GAP } from "@/lib/recipe-card";
 
 /**
  * Small presentational pieces shared between RecipeCardListMeasurer (which
@@ -15,6 +15,18 @@ const badgeColorClasses: Record<"purple" | "blue" | "orange", string> = {
   blue: "bg-blue-100 text-blue-700",
   orange: "bg-orange-100 text-orange-700",
 };
+
+// App branding lockup — same icon + wordmark pairing as the NavBar header.
+export function CardLogoLockup() {
+  return (
+    <div style={{ gap: LOGO_GAP }} className="flex items-center">
+      <span style={{ fontSize: LOGO_ICON_SIZE, lineHeight: 1 }}>🍽️</span>
+      <span style={{ fontSize: LOGO_TEXT_SIZE }} className="font-bold text-orange-800">
+        What&apos;s For Dinner?
+      </span>
+    </div>
+  );
+}
 
 export function CardTitle({
   name,

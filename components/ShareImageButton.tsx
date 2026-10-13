@@ -50,12 +50,17 @@ export function ShareImageButton({ recipe, shareUrl }: { recipe: ParsedRecipe; s
   async function handleClick() {
     setMessage(null);
     setFinal(null);
-    setPhase("measuring");
     try {
+      // Generate the QR BEFORE mounting the measurer — the measurer's layout
+      // effect can fire within a frame or two, and if phase flipped to
+      // "measuring" first, the eventual final card could mount with
+      // qrDataUrlRef.current still empty (a real race this app used to hit).
       qrDataUrlRef.current = await generateQrDataUrl(shareUrl, CARD_TIER_STYLES[tier].qrSize);
-    } catch {
+      setPhase("measuring");
+    } catch (e) {
+      console.error("Share-as-image: QR generation failed", e);
       setPhase("error");
-      setMessage("Couldn't generate the image — please try again.");
+      setMessage("Couldn't generate the QR code — please try again.");
     }
     // The measurer mounts below now that phase === "measuring"; handleMeasured continues the pipeline.
   }
@@ -89,6 +94,12 @@ export function ShareImageButton({ recipe, shareUrl }: { recipe: ParsedRecipe; s
             height: CARD_HEIGHT,
             pixelRatio: 1,
             backgroundColor: "#fff7ed",
+            // The card only ever uses system fonts (see RecipeShareCard), but
+            // Next.js's font loader still injects unused Geist @font-face
+            // rules into the document — html-to-image would otherwise try to
+            // download and embed those on every capture, which is a common
+            // source of capture failures for no visual benefit here.
+            skipFonts: true,
           });
           const blob = await (await fetch(dataUrl)).blob();
           const file = new File([blob], fileNameFor(recipe.name), { type: "image/png" });
@@ -113,6 +124,7 @@ export function ShareImageButton({ recipe, shareUrl }: { recipe: ParsedRecipe; s
           if (e instanceof Error && e.name === "AbortError") {
             setPhase("idle");
           } else {
+            console.error("Share-as-image: capture/share failed", e);
             setPhase("error");
             setMessage("Couldn't generate the image — please try again.");
           }

@@ -5,14 +5,18 @@
  * and components/RecipeCardListMeasurer.tsx for how real rendered heights
  * feed computeContentBudget below.
  *
- * Layout model: two PERMANENT corner zones (logo top-left, QR+caption
- * top-right) that are never overlapped, a title column constrained between
- * them, and a content zone strictly bounded between the title/corner row and
- * the bottom safe margin. Spacing between blocks (sectionGap, header
- * margins, "+more" label margins) is always a fixed per-tier constant, so the
- * only things that actually need DOM measurement are the things whose height
- * depends on real text content: the title (1 vs 2 lines), the badge row
- * (may wrap), and each ingredient/direction line (wraps independently).
+ * Layout model: a PERMANENT, fixed-size QR+caption zone top-right, and a
+ * logo+title column top-left (app logo/wordmark, then the recipe title
+ * directly beneath it) whose width is whatever's left beside the QR zone.
+ * Everything below — badges, ingredients, directions — starts beneath the
+ * logo+title column's own rendered height, NOT the QR zone's height; the QR
+ * zone is fixed and excluded from that calculation entirely, so empty space
+ * below it (when the title column is shorter) is expected. Spacing between
+ * blocks (sectionGap, header margins, "+more" label margins) is always a
+ * fixed per-tier constant, so the only things that actually need DOM
+ * measurement are the things whose height depends on real text content: the
+ * title (1 vs 2 lines), the badge row (may wrap), and each ingredient/
+ * direction line (wraps independently).
  */
 
 import { Ingredient, ParsedRecipe } from "./recipe-utils";
@@ -23,11 +27,18 @@ export const CARD_HEIGHT = 1350;
 export const SAFE_MARGIN = 64;
 export const CONTENT_WIDTH = CARD_WIDTH - 2 * SAFE_MARGIN;
 
-const TITLE_GAP = 24; // gap between each corner zone and the title column
 const QR_TILE_PADDING = 14; // white tile padding around the QR image
 const CAPTION_GAP = 8; // gap between the QR tile and its caption
 const HEADER_MARGIN_BOTTOM = 14;
 const MORE_LABEL_MARGIN_TOP = 10;
+const HEADER_COLUMN_GAP = 24; // horizontal gap between the logo+title column and the QR zone
+const LOGO_TITLE_GAP = 20; // vertical gap between the logo lockup and the title beneath it
+
+// App logo+wordmark lockup (top-left) — fixed branding, not tier-dependent.
+export const LOGO_ICON_SIZE = 40;
+export const LOGO_TEXT_SIZE = 32;
+export const LOGO_GAP = 12;
+const LOGO_BLOCK_HEIGHT = 48;
 
 // Off-screen DOM measurement caps — purely a performance guard against
 // rendering an absurd number of nodes; real recipes are always far under
@@ -56,8 +67,6 @@ type TierStyle = {
   directionLineHeight: number;
   qrSize: number;
   captionSize: number;
-  logoZoneWidth: number;
-  logoIconSize: number;
   sectionGap: number;
 };
 
@@ -69,7 +78,6 @@ export const CARD_TIER_STYLES: Record<CardTier, TierStyle> = {
     ingredientSize: 34, ingredientLineHeight: 1.7,
     directionSize: 34, directionLineHeight: 1.75,
     qrSize: 220, captionSize: 22,
-    logoZoneWidth: 150, logoIconSize: 64,
     sectionGap: 40,
   },
   standard: {
@@ -77,7 +85,6 @@ export const CARD_TIER_STYLES: Record<CardTier, TierStyle> = {
     ingredientSize: 28, ingredientLineHeight: 1.45,
     directionSize: 28, directionLineHeight: 1.5,
     qrSize: 195, captionSize: 20,
-    logoZoneWidth: 130, logoIconSize: 56,
     sectionGap: 32,
   },
   minimal: {
@@ -85,39 +92,39 @@ export const CARD_TIER_STYLES: Record<CardTier, TierStyle> = {
     ingredientSize: 23, ingredientLineHeight: 1.3,
     directionSize: 23, directionLineHeight: 1.35,
     qrSize: 170, captionSize: 18,
-    logoZoneWidth: 110, logoIconSize: 48,
     sectionGap: 24,
   },
 };
 
-// ── Corner zones ─────────────────────────────────────────────────────────────
+// ── Zones ────────────────────────────────────────────────────────────────────
+// QR+caption is a fixed box top-right; the logo+title column takes whatever
+// width is left beside it. The QR zone's own height plays NO part in where
+// the content zone starts — only the logo+title column's height does.
 
 export type CardZones = {
-  logoZoneWidth: number;
-  cornerZoneHeight: number; // shared height of both top corners
   qrZoneWidth: number;
-  titleColumnLeft: number; // offset from the content left edge (SAFE_MARGIN)
-  titleColumnWidth: number;
+  qrZoneHeight: number;
+  logoTitleColumnWidth: number;
 };
 
 export function computeZones(tier: CardTier): CardZones {
   const style = CARD_TIER_STYLES[tier];
   const qrZoneWidth = style.qrSize + 2 * QR_TILE_PADDING;
   const captionLineHeight = Math.round(style.captionSize * 1.3);
-  const cornerZoneHeight = style.qrSize + 2 * QR_TILE_PADDING + CAPTION_GAP + captionLineHeight;
-  const titleColumnLeft = style.logoZoneWidth + TITLE_GAP;
-  const titleColumnWidth = CONTENT_WIDTH - style.logoZoneWidth - qrZoneWidth - 2 * TITLE_GAP;
-  return { logoZoneWidth: style.logoZoneWidth, cornerZoneHeight, qrZoneWidth, titleColumnLeft, titleColumnWidth };
+  const qrZoneHeight = style.qrSize + 2 * QR_TILE_PADDING + CAPTION_GAP + captionLineHeight;
+  const logoTitleColumnWidth = CONTENT_WIDTH - qrZoneWidth - HEADER_COLUMN_GAP;
+  return { qrZoneWidth, qrZoneHeight, logoTitleColumnWidth };
 }
 
-export { QR_TILE_PADDING, CAPTION_GAP };
+export { QR_TILE_PADDING, CAPTION_GAP, LOGO_TITLE_GAP };
 
-// Where the content zone starts, and how tall it's allowed to be — driven by
-// the MEASURED title height (it can grow to 2 lines) vs. the fixed corner
-// zone height, whichever is taller.
+// Where the content zone starts, and how tall it's allowed to be — the logo
+// block plus the MEASURED title height (it can grow to 2 lines). The QR
+// zone's height is deliberately NOT part of this — it's fixed and may leave
+// visible empty space beneath it when the title column is shorter.
 export function computeContentZoneTop(titleHeight: number, tier: CardTier): number {
-  const zones = computeZones(tier);
-  return Math.max(zones.cornerZoneHeight, titleHeight) + CARD_TIER_STYLES[tier].sectionGap;
+  const gap = CARD_TIER_STYLES[tier].sectionGap;
+  return LOGO_BLOCK_HEIGHT + LOGO_TITLE_GAP + titleHeight + gap;
 }
 
 export function computeAvailableContentHeight(contentZoneTop: number): number {
