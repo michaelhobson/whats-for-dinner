@@ -1,6 +1,6 @@
 # Roadmap & Phase Status
 
-Read this before starting a new phase or making schema decisions for a planned feature. Update the status checklist when a phase completes.
+Read this before starting a new phase or making schema decisions for a planned feature. Update the status checklist when a phase completes. How already-built features work is in `docs/ARCHITECTURE.md`.
 
 ## Status
 
@@ -19,21 +19,11 @@ Read this before starting a new phase or making schema decisions for a planned f
 - [ ] Phase 2.6 — Planning tools (full week mode, shopping list)
 - [ ] Phase 2.7 — Dinner party mode
 
-## Already built — architecture notes to keep in mind
-
-**Accounts model.** Recipes, ratings, notes, and cook history belong to a Kitchen, not directly to a User. A KitchenMembership join table links Users to Kitchens with a role. Every user gets one personal Kitchen by default; a Kitchen can have multiple members, and a User can belong to multiple Kitchens. Do not simplify this back to a direct User-owns-Recipe relationship.
-
-**Global recipe pool.** A regular Kitchen flagged `isGlobalPool: true` (exactly one such row; resolved via `lib/global-pool.ts`'s `getGlobalPoolKitchenId()`). Push access (add/edit/delete pool recipes) is plain CHEF-or-above membership in that Kitchen — the same role check as any other kitchen, no parallel permission system. "Pulling" calls the one shared `pullRecipeToKitchen()`: copies content fields only (ratings/notes/cook-history/favorite are NOT copied — those stay kitchen-specific and start fresh), sets `forkedFromRecipeId` to the original, and is idempotent (a second pull of the same original into the same kitchen returns the existing fork; pulling into the original's own kitchen is blocked outright). New kitchens — via `createKitchen()` and the first-login personal-kitchen path, never retroactively — are auto-seeded with the full pool through this same function. The "Hide starter recipes" toggle (Cookbook/Randomizer) excludes only recipes forked from a recipe actually in the pool kitchen, not forks of any other kitchen's recipes.
-
-**Recipe sharing via unlisted links.** `Recipe.shareToken` (unique) + `shareRevokedAt` — at most one active link per recipe. Generating reuses an existing active token rather than minting a new one; revoking sets `shareRevokedAt`, and the next generate always mints a fresh token (the old one can never reactivate). `/share/[token]` is public (excluded from `proxy.ts`'s auth gate), force-dynamic (live recipe state, never a snapshot), and noindex. A non-member viewing a recipe there (or via the Global Pool) only ever sees read-only content — rating/notes/cook-history require actual kitchen membership. Pulling from a share link reuses the exact same `pullRecipeToKitchen()` as the Global Pool, including the same guards.
-
-**Shareable recipe card image.** Generated client-side (`html-to-image` + `qrcode`), not server-rendered, as a fixed 1080×1350 PNG. Three *discrete* density tiers (Generous/Standard/Minimal, chosen by ingredient + capped step count), not continuous font scaling — Generous fills space via spacing, not bigger text. Truncation is decided from real measured DOM heights (an off-screen "measurer" pass using the same shared sub-components as the final card), not a character-count estimate — the estimate approach was tried first and produced visible overlap/overflow. The embedded QR logo mark is centered from the canvas's actual final pixel dimensions and `ctx.measureText()`'s real bounding box, not the nominal requested size — neither is reliably consistent across devices.
-
 ## Planned, with architecture notes to keep in mind now
 
 **Per-person recipe feedback.** Ratings, notes, and cook history will eventually become per-kitchen-member instead of one shared value per recipe: each member's own thumbs up/down aggregating into a kitchen-wide net rating, a shared cook-history log showing who cooked what and when, and notes behaving like an attributed comment thread. Not being built yet.
 
-**Fork freshness check.** Automatically checking whether a forked recipe's original has since been updated, and surfacing that to the kitchen that pulled it, is not built. `forkedFromRecipeId` currently only records lineage at pull time — no diffing or "update available" signal.
+**Fork freshness check.** Automatically checking whether a forked recipe's original has since been updated, and surfacing that to the kitchen that pulled it, is not built. `forkedFromRecipeId` currently only records lineage at pull time, with no diffing or "update available" signal.
 
 **Dinner party mode.** Needs new recipe categories (side dishes, appetizers, beverages) beyond the existing meal types. This is a schema decision to make when the phase starts, not before.
 
